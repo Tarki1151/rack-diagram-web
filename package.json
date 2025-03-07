@@ -1,0 +1,28 @@
+{
+  "dependencies": {
+    "aws-amplify": "^6.13.4",
+    "d3": "^7.9.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "react-draggable": "^4.4.6"
+  },
+  "name": "rack-diagram-web",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Tarki1151/rack-diagram-web.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/Tarki1151/rack-diagram-web/issues"
+  },
+  "homepage": "https://github.com/Tarki1151/rack-diagram-web#readme"
+}

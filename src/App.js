@@ -26,7 +26,9 @@ const App = () => {
         setErrors(null);
         const cabinetNames = Object.keys(data);
         const initialPositions = cabinetNames.reduce((acc, cabinet, i) => {
-          acc[cabinet] = { x: i * (200 + 10), y: 0 }; // 10 piksel aralık
+          const xPosition =  i * -5 ; //  0 piksel artı boşluk
+          acc[cabinet] = { x: xPosition, y: 0 };
+          console.log(`Position for ${cabinet}: x=${xPosition}`); // Debug log
           return acc;
         }, {});
         setPositions(initialPositions);

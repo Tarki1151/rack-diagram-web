@@ -1,76 +1,44 @@
-import React, { useState, useEffect, useRef } from 'react';
-import * as d3 from 'd3';
+import React, { useState } from 'react';
+import { Stage, Layer, Rect, Text, Line } from 'react-konva';
 import Draggable from 'react-draggable';
-import { Amplify, API, Storage } from 'aws-amplify';
-import awsconfig from './aws-exports';
 import './App.css';
-
-Amplify.configure(awsconfig);
 
 const App = () => {
   const [cabinets, setCabinets] = useState({});
   const [positions, setPositions] = useState({});
   const [file, setFile] = useState(null);
   const [errors, setErrors] = useState(null);
-  const rackRefs = useRef({});
 
   const uploadFile = async () => {
     if (!file) return;
-    await Storage.put(file.name, file, { contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-    const response = await API.get('RackAPI', '/racks', { queryStringParameters: { file_key: file.name } });
-    if (response.errors) {
-      setErrors(response.errors);
-    } else {
-      setCabinets(response);
-      setErrors(null);
-      const initialPositions = Object.keys(response).reduce((acc, cabinet, i) => {
-        acc[cabinet] = { x: i * 250, y: 0 };
-        return acc;
-      }, {});
-      setPositions(initialPositions);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+
+      const response = await fetch('http://localhost:3001/upload', {
+        method: 'POST',
+        body: formData,
+      });
+      const data = await response.json();
+
+      console.log('Uploaded data:', data);
+
+      if (data.errors) {
+        setErrors(data.errors);
+      } else {
+        setCabinets(data);
+        setErrors(null);
+        const cabinetNames = Object.keys(data);
+        const initialPositions = cabinetNames.reduce((acc, cabinet, i) => {
+          acc[cabinet] = { x: i * (200 + 5), y: 0 };
+          return acc;
+        }, {});
+        setPositions(initialPositions);
+      }
+    } catch (error) {
+      console.error('Dosya yükleme hatası:', error);
+      setErrors({ upload: 'Dosya yüklenirken bir hata oluştu: ' + error.message });
     }
-  };
-
-  const drawRack = (cabinetName, data, ref) => {
-    const svg = d3.select(ref).select('svg');
-    if (!svg.empty()) svg.remove(); // Önceki SVG’yi temizle
-
-    const newSvg = d3.select(ref).append('svg')
-      .attr('width', 200)
-      .attr('height', 600);
-
-    const rackHeight = 42;
-    const uHeight = 600 / rackHeight;
-
-    data.forEach(item => {
-      const startU = parseInt(item.Rack.match(/\d+/)?.[0] || 1) - 1;
-      const u = parseFloat(item.U) || 1;
-      const color = item.Rack.includes('(ARKA)') ? 'orange' : 'lightblue';
-
-      newSvg.append('rect')
-        .attr('x', 10)
-        .attr('y', startU * uHeight)
-        .attr('width', 180)
-        .attr('height', u * uHeight)
-        .attr('fill', color)
-        .attr('stroke', 'black');
-
-      newSvg.append('text')
-        .attr('x', 100)
-        .attr('y', (startU + u / 2) * uHeight)
-        .attr('text-anchor', 'middle')
-        .attr('dy', '.35em')
-        .text(item.MarkaModel);
-    });
-
-    newSvg.selectAll('.u-label')
-      .data(d3.range(0, rackHeight))
-      .enter()
-      .append('text')
-      .attr('x', 5)
-      .attr('y', d => d * uHeight + uHeight / 2)
-      .attr('text-anchor', 'end')
-      .text(d => rackHeight - d);
   };
 
   const handleDrag = (cabinet, e, data) => {
@@ -80,13 +48,208 @@ const App = () => {
     }));
   };
 
-  useEffect(() => {
-    Object.entries(cabinets).forEach(([cabinet, data]) => {
-      if (rackRefs.current[cabinet]) {
-        drawRack(cabinet, data, rackRefs.current[cabinet]);
+  const RackComponent = ({ cabinet, data, position }) => {
+    const rackHeight = 42;
+    const frameTop = 24; // Üstte 1U boşluk
+    const frameBottom = 576; // Altta 1U boşluk
+    const innerHeight = frameBottom - frameTop; // İç yükseklik: 552
+    const uHeight = innerHeight / rackHeight; // uHeight: ~13.14
+
+    // Hata kontrolü ve veri düzeltme
+    let adjustedData = [];
+    let hasError = false;
+
+    if (!Array.isArray(data) || data.length === 0) {
+      adjustedData = [];
+    } else {
+      adjustedData = data.map(item => {
+        const rackValue = String(item.Rack || '1');
+        console.log(`Rack value for ${cabinet}: ${rackValue}`); // Rack sütununu kontrol et
+        let startU = parseInt(rackValue.match(/\d+/)?.[0] || 1);
+        const u = parseFloat(item.U) || 1;
+
+        if (startU === 0) {
+          startU = 1; // 0 ise +1 yap
+          console.log(`U düzeltildi: ${cabinet}, Rack: 0 -> 1`);
+        } else if (startU < 0 || startU > 50) {
+          hasError = true;
+          return null;
+        }
+
+        return { ...item, Rack: startU };
+      });
+
+      if (hasError) {
+        adjustedData = [];
       }
-    });
-  }, [cabinets, positions]);
+    }
+
+    // Maksimum U kontrolü
+    const maxU = adjustedData.length > 0
+      ? Math.max(...adjustedData.map(item => {
+          const startU = parseInt(item.Rack);
+          const u = parseFloat(item.U) || 1;
+          return startU + u - 1;
+        }))
+      : rackHeight;
+
+    const isFullRack = maxU > rackHeight;
+
+    const draggableRef = React.createRef();
+
+    return (
+      <Draggable
+        position={position}
+        onDrag={(e, data) => handleDrag(cabinet, e, data)}
+        nodeRef={draggableRef}
+      >
+        <div className="rack" ref={draggableRef}>
+          <h3>{cabinet}</h3>
+          <Stage width={200} height={600}>
+            <Layer>
+              {/* Dış çerçeve */}
+              <Rect
+                x={10}
+                y={frameTop}
+                width={180}
+                height={innerHeight}
+                stroke="black"
+                strokeWidth={2}
+                fill="transparent"
+              />
+
+              {/* U yüksekliği için yatay çizgiler */}
+              {Array.from({ length: rackHeight + 1 }, (_, i) => (
+                <Line
+                  key={`line-${i}`}
+                  points={[30, frameTop + i * uHeight, 170, frameTop + i * uHeight]}
+                  stroke="#ccc"
+                  strokeWidth={1}
+                />
+              ))}
+
+              {/* Tüm kabinler için numaralandırma */}
+              {Array.from({ length: rackHeight }, (_, i) => (
+                <Text
+                  key={`label-${i}`}
+                  x={15}
+                  y={frameTop + i * uHeight + uHeight / 2 - 6}
+                  text={String(rackHeight - i)}
+                  fontSize={10}
+                  fill="black"
+                  align="right"
+                  width={15}
+                />
+              ))}
+
+              {/* Veri çizimi */}
+              {adjustedData.length === 0 ? (
+                hasError ? (
+                  <>
+                    <Rect
+                      x={30}
+                      y={frameTop}
+                      width={140}
+                      height={innerHeight}
+                      fill="red"
+                      stroke="black"
+                      strokeWidth={1}
+                    />
+                    <Text
+                      x={100}
+                      y={frameTop + innerHeight / 2 - 8}
+                      text="Hatalı Veri"
+                      fontSize={16}
+                      fill="white"
+                      align="center"
+                      width={140}
+                    />
+                  </>
+                ) : (
+                  <Text
+                    x={100}
+                    y={100}
+                    text="Veri Yok"
+                    fontSize={16}
+                    fill="black"
+                    align="center"
+                  />
+                )
+              ) : isFullRack ? (
+                <>
+                  <Rect
+                    x={30}
+                    y={frameTop}
+                    width={140}
+                    height={innerHeight}
+                    fill="yellow"
+                    stroke="black"
+                    strokeWidth={1}
+                  />
+                  <Text
+                    x={30}
+                    y={frameTop + innerHeight / 2 - 16}
+                    text={adjustedData[0]?.BrandModel || 'Bilinmeyen Model'}
+                    fontSize={10}
+                    fill="black"
+                    align="center"
+                    width={140}
+                  />
+                  <Text
+                    x={30}
+                    y={frameTop + innerHeight / 2}
+                    text={`42U’dan yüksek ${maxU}U`}
+                    fontSize={10}
+                    fill="black"
+                    align="center"
+                    width={140}
+                  />
+                </>
+              ) : (
+                adjustedData.map((item, index) => {
+                  const rackValue = String(item.Rack);
+                  const startU = parseInt(rackValue);
+                  const u = parseFloat(item.U) || 1;
+                  const color = rackValue.includes('(ARKA)') ? 'orange' : 'lightblue';
+
+                  const rectY = frameBottom - (startU - 1 + u) * uHeight;
+                  const rectHeight = u * uHeight;
+
+                  if (rectY < frameTop) {
+                    console.log(`Üstten taşma: ${cabinet}, Rack: ${rackValue}, y: ${rectY}, height: ${rectHeight}`);
+                    return null;
+                  }
+
+                  return (
+                    <React.Fragment key={index}>
+                      <Rect
+                        x={30}
+                        y={rectY}
+                        width={140}
+                        height={rectHeight}
+                        fill={color}
+                        stroke="black"
+                        strokeWidth={1}
+                      />
+                      <Text
+                        x={30}
+                        y={rectY + rectHeight / 2 - 6}
+                        text={item.BrandModel || 'Bilinmeyen Model'}
+                        fontSize={10}
+                        fill="black"
+                        align="center"
+                        width={140}
+                      />
+                    </React.Fragment>
+                  );
+                })
+              )}
+            </Layer>
+          </Stage>
+        </div>
+      </Draggable>
+    );
+  };
 
   return (
     <div className="app">
@@ -104,19 +267,13 @@ const App = () => {
       )}
       
       <div className="system-room">
-        {Object.entries(cabinets).map(([cabinet, data]) => (
-          <Draggable
+        {Object.entries(cabinets).map(([cabinet, data], index) => (
+          <RackComponent
             key={cabinet}
+            cabinet={cabinet}
+            data={data}
             position={positions[cabinet]}
-            onDrag={(e, data) => handleDrag(cabinet, e, data)}
-          >
-            <div
-              className="rack"
-              ref={node => rackRefs.current[cabinet] = node}
-            >
-              <h3>{cabinet}</h3>
-            </div>
-          </Draggable>
+          />
         ))}
       </div>
     </div>
@@ -124,9 +281,3 @@ const App = () => {
 };
 
 export default App;
-
-// App.css
-.app { padding: 20px; }
-.system-room { display: flex; flex-wrap: wrap; gap: 20px; }
-.rack { width: 220px; height: 620px; border: 1px solid #ccc; position: relative; }
-.errors { color: red; margin-top: 20px; }

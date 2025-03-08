@@ -1,28 +1,35 @@
 {
-  "dependencies": {
-    "aws-amplify": "^6.13.4",
-    "d3": "^7.9.0",
-    "react": "^19.0.0",
-    "react-dom": "^19.0.0",
-    "react-draggable": "^4.4.6"
-  },
   "name": "rack-diagram-web",
-  "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
+  "version": "0.1.0",
+  "private": true,
+  "dependencies": {
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "react-draggable": "^4.4.5",
+    "react-konva": "^18.2.10",
+    "konva": "^9.3.6",
+    "react-scripts": "5.0.1",
+    "@testing-library/react": "^16.2.0",
+    "express": "^4.18.2",
+    "multer": "^1.4.5-lts.1",
+    "cors": "^2.8.5"
+  },
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "start": "react-scripts start",
+    "build": "react-scripts build",
+    "test": "react-scripts test",
+    "eject": "react-scripts eject"
   },
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/Tarki1151/rack-diagram-web.git"
-  },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "type": "commonjs",
-  "bugs": {
-    "url": "https://github.com/Tarki1151/rack-diagram-web/issues"
-  },
-  "homepage": "https://github.com/Tarki1151/rack-diagram-web#readme"
+  "browserslist": {
+    "production": [
+      ">0.2%",
+      "not dead",
+      "not op_mini all"
+    ],
+    "development": [
+      "last 1 chrome version",
+      "last 1 firefox version",
+      "last 1 safari version"
+    ]
+  }
 }

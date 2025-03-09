@@ -1,7 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import UploadComponent from './UploadComponent';
 import RackComponent from './RackComponent';
 import './App.css';
+import { Stage, Layer } from 'react-konva';
+import { jsPDF } from 'jspdf';
 
 const App = () => {
   const [cabinets, setCabinets] = useState({});
@@ -9,8 +11,9 @@ const App = () => {
   const [file, setFile] = useState(null);
   const [errors, setErrors] = useState(null);
   const [gridSize, setGridSize] = useState(10);
-  const [labelMargin, setLabelMargin] = useState(-15); // Varsayılan 10px boşluk
+  const [labelMargin, setLabelMargin] = useState(0);
   const [labelAlignment, setLabelAlignment] = useState('center');
+  const stageRef = useRef(null);
 
   const uploadFile = async () => {
     if (!file) return;
@@ -26,7 +29,7 @@ const App = () => {
         setCabinets(data);
         setErrors(null);
         const cabinetNames = Object.keys(data);
-        const extraSpace = -18;
+        const extraSpace = 180;
         const initialPositions = cabinetNames.reduce((acc, cabinet, i) => {
           const xPosition = i * extraSpace;
           acc[cabinet] = { x: xPosition, y: 0 };
@@ -40,20 +43,48 @@ const App = () => {
     }
   };
 
-  const handleDrag = (cabinet, e, data) => {
-    setPositions(prev => ({ ...prev, [cabinet]: { x: data.x, y: data.y } }));
+  const handleDragMove = (e, gridSize) => {
+    const newX = gridSize > 0 ? Math.round(e.target.x() / gridSize) * gridSize : e.target.x();
+    const newY = gridSize > 0 ? Math.round(e.target.y() / gridSize) * gridSize : e.target.y();
+    e.target.x(newX);
+    e.target.y(newY);
   };
 
-  const handleGridChange = (e) => {
-    setGridSize(parseInt(e.target.value));
+  const handleDragEnd = (cabinet, e) => {
+    setPositions(prev => ({
+      ...prev,
+      [cabinet]: { x: e.target.x(), y: e.target.y() }
+    }));
   };
 
-  const handleMarginChange = (e) => {
-    setLabelMargin(parseInt(e.target.value));
+  const handleGridChange = (e) => setGridSize(parseInt(e.target.value));
+  const handleMarginChange = (e) => setLabelMargin(parseInt(e.target.value));
+  const handleAlignmentChange = (e) => setLabelAlignment(e.target.value);
+
+  const exportToPNG = () => {
+    const dataURL = stageRef.current.toDataURL();
+    const link = document.createElement('a');
+    link.href = dataURL;
+    link.download = 'rack-diagram.png';
+    link.click();
   };
 
-  const handleAlignmentChange = (e) => {
-    setLabelAlignment(e.target.value);
+  const exportToSVG = () => {
+    const svgData = stageRef.current.toDataURL({ mimeType: 'image/svg+xml' });
+    const blob = new Blob([svgData], { type: 'image/svg+xml' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'rack-diagram.svg';
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const exportToPDF = () => {
+    const pdf = new jsPDF();
+    const imgData = stageRef.current.toDataURL();
+    pdf.addImage(imgData, 'PNG', 10, 10, 180, 0);
+    pdf.save('rack-diagram.pdf');
   };
 
   return (
@@ -65,18 +96,17 @@ const App = () => {
           <label htmlFor="gridSize">Snap-to-Grid: </label>
           <select id="gridSize" value={gridSize} onChange={handleGridChange}>
             <option value={0}>Izgara Yok</option>
-            <option value={5}>5x5</option>
             <option value={10}>10x10</option>
-            <option value={15}>15x15</option>
+            <option value={20}>20x20</option>
           </select>
         </div>
         <div className="option">
           <label htmlFor="labelMargin">Etiket Boşluğu: </label>
           <select id="labelMargin" value={labelMargin} onChange={handleMarginChange}>
-            <option value={-25}>0px (Bitişik)</option>
-            <option value={-20}>5px</option>
-            <option value={-15}>10px</option>
-            <option value={-10}>15px</option>
+            <option value={0}>0px (Bitişik)</option>
+            <option value={5}>5px</option>
+            <option value={10}>10px</option>
+            <option value={15}>15px</option>
           </select>
         </div>
         <div className="option">
@@ -88,20 +118,32 @@ const App = () => {
           </select>
         </div>
       </div>
-      <div className="system-room">
-        {Object.entries(cabinets).map(([cabinet, data]) => (
-          <RackComponent
-            key={cabinet}
-            cabinet={cabinet}
-            data={data}
-            position={positions[cabinet]}
-            handleDrag={handleDrag}
-            gridSize={gridSize}
-            labelMargin={labelMargin}
-            labelAlignment={labelAlignment}
-          />
-        ))}
+      <div>
+        <button onClick={exportToPNG}>PNG İndir</button>
+        <button onClick={exportToSVG}>SVG İndir</button>
+        <button onClick={exportToPDF}>PDF İndir</button>
       </div>
+      <Stage
+        width={window.innerWidth}
+        height={window.innerHeight}
+        ref={stageRef}
+      >
+        <Layer>
+          {Object.entries(cabinets).map(([cabinet, data]) => (
+            <RackComponent
+              key={cabinet}
+              cabinet={cabinet}
+              data={data}
+              position={positions[cabinet]}
+              handleDragMove={(e) => handleDragMove(e, gridSize)}
+              handleDragEnd={handleDragEnd}
+              gridSize={gridSize}
+              labelMargin={labelMargin}
+              labelAlignment={labelAlignment}
+            />
+          ))}
+        </Layer>
+      </Stage>
     </div>
   );
 };

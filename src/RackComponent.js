@@ -2,7 +2,7 @@ import React from 'react';
 import { Stage, Layer, Rect, Text, Line } from 'react-konva';
 import Draggable from 'react-draggable';
 
-const RackComponent = ({ cabinet, data, position, handleDrag, gridSize }) => {
+const RackComponent = ({ cabinet, data, position, handleDrag, gridSize, labelMargin, labelAlignment }) => {
   const rackHeight = 42;
   const frameTop = 24;
   const frameBottom = 576;
@@ -12,7 +12,6 @@ const RackComponent = ({ cabinet, data, position, handleDrag, gridSize }) => {
   let adjustedData = Array.isArray(data) && data.length > 0
     ? data.map(item => {
         const rackValue = String(item.Rack || '1');
-        console.log(`Rack value for ${cabinet}: ${rackValue}, Face: ${item.Face}`);
         let startU = parseInt(rackValue.match(/\d+/)?.[0] || 1);
         const u = parseFloat(item.U) || 1;
 
@@ -33,26 +32,31 @@ const RackComponent = ({ cabinet, data, position, handleDrag, gridSize }) => {
       position={position}
       onDrag={(e, data) => handleDrag(cabinet, e, data)}
       nodeRef={draggableRef}
-      grid={gridSize > 0 ? [gridSize, gridSize] : undefined} // Izgara Yok için grid devre dışı
+      grid={gridSize > 0 ? [gridSize, gridSize] : undefined}
     >
       <div className="rack" ref={draggableRef}>
-        <h3>{cabinet}</h3>
+        <h3 style={{ 
+          marginBottom: `${labelMargin}px`, 
+          textAlign: labelAlignment, 
+          width: '180px', // Etiket genişliği kabinle uyumlu
+          overflow: 'hidden'
+        }}>{cabinet}</h3>
         <Stage width={200} height={600}>
           <Layer>
-            <Rect x={10} y={frameTop} width={180} height={innerHeight} stroke="black" strokeWidth={2} fill="transparent" />
+            <Rect x={0} y={frameTop} width={180} height={innerHeight} stroke="black" strokeWidth={2} fill="transparent" />
             {Array.from({ length: rackHeight + 1 }, (_, i) => (
-              <Line key={`line-${i}`} points={[30, frameTop + i * uHeight, 170, frameTop + i * uHeight]} stroke="#ccc" strokeWidth={1} />
+              <Line key={`line-${i}`} points={[20, frameTop + i * uHeight, 160, frameTop + i * uHeight]} stroke="#ccc" strokeWidth={1} />
             ))}
             {Array.from({ length: rackHeight }, (_, i) => (
-              <Text key={`label-${i}`} x={15} y={frameTop + i * uHeight + uHeight / 2 - 6} text={String(rackHeight - i)} fontSize={10} fill="black" align="right" width={15} />
+              <Text key={`label-${i}`} x={5} y={frameTop + i * uHeight + uHeight / 2 - 6} text={String(rackHeight - i)} fontSize={10} fill="black" align="right" width={15} />
             ))}
             {adjustedData.length === 0 ? (
-              <Text x={100} y={100} text="Veri Yok" fontSize={16} fill="black" align="center" />
+              <Text x={90} y={100} text="Veri Yok" fontSize={16} fill="black" align="center" />
             ) : isFullRack ? (
               <>
-                <Rect x={30} y={frameTop} width={140} height={innerHeight} fill="yellow" stroke="black" strokeWidth={1} />
-                <Text x={35} y={frameTop + innerHeight / 2 - 20} text={adjustedData[0]?.BrandModel || 'Bilinmeyen Model'} fontSize={9} fill="black" align="center" width={130} />
-                <Text x={35} y={frameTop + innerHeight / 2} text={`42U’dan yüksek ${maxU}U`} fontSize={9} fill="black" align="center" width={130} />
+                <Rect x={20} y={frameTop} width={140} height={innerHeight} fill="yellow" stroke="black" strokeWidth={1} />
+                <Text x={25} y={frameTop + innerHeight / 2 - 20} text={adjustedData[0]?.BrandModel || 'Bilinmeyen Model'} fontSize={9} fill="black" align="center" width={130} />
+                <Text x={25} y={frameTop + innerHeight / 2} text={`42U’dan yüksek ${maxU}U`} fontSize={9} fill="black" align="center" width={130} />
               </>
             ) : (
               adjustedData.map((item, index) => {
@@ -66,8 +70,8 @@ const RackComponent = ({ cabinet, data, position, handleDrag, gridSize }) => {
 
                 return (
                   <React.Fragment key={index}>
-                    <Rect x={30} y={rectY} width={140} height={rectHeight} fill={color} stroke="black" strokeWidth={1} />
-                    <Text x={30} y={rectY + rectHeight / 2 - 6} text={item.BrandModel || 'Bilinmeyen Model'} fontSize={10} fill="black" align="center" width={140} />
+                    <Rect x={20} y={rectY} width={140} height={rectHeight} fill={color} stroke="black" strokeWidth={1} />
+                    <Text x={20} y={rectY + rectHeight / 2 - 6} text={item.BrandModel || 'Bilinmeyen Model'} fontSize={10} fill="black" align="center" width={140} />
                   </React.Fragment>
                 );
               })

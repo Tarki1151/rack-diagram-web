@@ -5,7 +5,7 @@
 .system-room {
   display: flex;
   flex-wrap: wrap;
-  gap: 0; /* Ekstra boşluk yok */
+  gap: 0;
   padding: 0;
   margin: 0;
 }
@@ -13,4 +13,18 @@
 .rack {
   margin: 0;
   padding: 0;
+}
+
+.options-container {
+  display: flex;
+  flex-wrap: wrap; /* Ekrana sığmazsa alt satıra geçer */
+  gap: 20px; /* Seçenekler arası boşluk */
+  justify-content: center; /* Ortalanmış dizilim */
+  margin: 10px 0; /* Üst ve alt boşluk */
+}
+
+.option {
+  display: flex;
+  align-items: center; /* Label ve select yan yana hizalı */
+  gap: 5px; /* Label ile select arası boşluk */
 }

@@ -8,7 +8,9 @@ const App = () => {
   const [positions, setPositions] = useState({});
   const [file, setFile] = useState(null);
   const [errors, setErrors] = useState(null);
-  const [gridSize, setGridSize] = useState(10); // Varsayılan 10x10 grid
+  const [gridSize, setGridSize] = useState(10);
+  const [labelMargin, setLabelMargin] = useState(-15); // Varsayılan 10px boşluk
+  const [labelAlignment, setLabelAlignment] = useState('center');
 
   const uploadFile = async () => {
     if (!file) return;
@@ -18,19 +20,16 @@ const App = () => {
       const response = await fetch('http://localhost:3001/upload', { method: 'POST', body: formData });
       const data = await response.json();
 
-      console.log('Uploaded data:', data);
-
       if (data.errors) {
         setErrors(data.errors);
       } else {
         setCabinets(data);
         setErrors(null);
         const cabinetNames = Object.keys(data);
-        const extraSpace = -18; // Varsayılan 18 piksel boşluğu sıfırlayıp bitişik çizim
+        const extraSpace = -18;
         const initialPositions = cabinetNames.reduce((acc, cabinet, i) => {
           const xPosition = i * extraSpace;
           acc[cabinet] = { x: xPosition, y: 0 };
-          console.log(`Position for ${cabinet}: x=${xPosition}`);
           return acc;
         }, {});
         setPositions(initialPositions);
@@ -49,18 +48,45 @@ const App = () => {
     setGridSize(parseInt(e.target.value));
   };
 
+  const handleMarginChange = (e) => {
+    setLabelMargin(parseInt(e.target.value));
+  };
+
+  const handleAlignmentChange = (e) => {
+    setLabelAlignment(e.target.value);
+  };
+
   return (
     <div className="app">
       <h1>Rack Diagram Web</h1>
       <UploadComponent setFile={setFile} uploadFile={uploadFile} errors={errors} />
-      <div>
-        <label htmlFor="gridSize">Snap-to-Grid Boyutu: </label>
-        <select id="gridSize" value={gridSize} onChange={handleGridChange}>
-          <option value={0}>Izgara Yok</option>
-          <option value={5}>5x5</option>
-          <option value={10}>10x10</option>
-          <option value={15}>15x15</option>
-        </select>
+      <div className="options-container">
+        <div className="option">
+          <label htmlFor="gridSize">Snap-to-Grid: </label>
+          <select id="gridSize" value={gridSize} onChange={handleGridChange}>
+            <option value={0}>Izgara Yok</option>
+            <option value={5}>5x5</option>
+            <option value={10}>10x10</option>
+            <option value={15}>15x15</option>
+          </select>
+        </div>
+        <div className="option">
+          <label htmlFor="labelMargin">Etiket Boşluğu: </label>
+          <select id="labelMargin" value={labelMargin} onChange={handleMarginChange}>
+            <option value={-25}>0px (Bitişik)</option>
+            <option value={-20}>5px</option>
+            <option value={-15}>10px</option>
+            <option value={-10}>15px</option>
+          </select>
+        </div>
+        <div className="option">
+          <label htmlFor="labelAlignment">Etiket Hizalama: </label>
+          <select id="labelAlignment" value={labelAlignment} onChange={handleAlignmentChange}>
+            <option value="left">Sol</option>
+            <option value="center">Orta</option>
+            <option value="right">Sağ</option>
+          </select>
+        </div>
       </div>
       <div className="system-room">
         {Object.entries(cabinets).map(([cabinet, data]) => (
@@ -71,6 +97,8 @@ const App = () => {
             position={positions[cabinet]}
             handleDrag={handleDrag}
             gridSize={gridSize}
+            labelMargin={labelMargin}
+            labelAlignment={labelAlignment}
           />
         ))}
       </div>

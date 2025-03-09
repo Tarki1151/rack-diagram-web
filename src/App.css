@@ -1,5 +1,77 @@
-.app {
-  text-align: center;
+.app-container {
+  min-height: 100vh;
+  background-image: url('/public/bg.jpg');
+  background-size: cover;
+  background-position: center;
+}
+
+.app-content {
+  background-color: rgba(255, 255, 255, 0.9); /* %90 şeffaf beyaz */
+  min-height: 100vh;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.options-container {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 20px;
+  justify-content: center;
+  margin: 10px 0;
+  width: 100%;
+}
+
+.option {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.upload-component {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.button-container {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: center;
+  margin: 10px 0;
+}
+
+.help-button {
+  padding: 10px 20px;
+  font-size: 1em;
+  background-color: #28a745;
+  color: white;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+}
+
+.help-button:hover {
+  background-color: #218838;
+}
+
+button {
+  padding: 10px 20px;
+  font-size: 1em;
+  background-color: #007bff;
+  color: white;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+}
+
+button:hover {
+  background-color: #0056b3;
 }
 
 .system-room {
@@ -13,18 +85,4 @@
 .rack {
   margin: 0;
   padding: 0;
-}
-
-.options-container {
-  display: flex;
-  flex-wrap: wrap; /* Ekrana sığmazsa alt satıra geçer */
-  gap: 20px; /* Seçenekler arası boşluk */
-  justify-content: center; /* Ortalanmış dizilim */
-  margin: 10px 0; /* Üst ve alt boşluk */
-}
-
-.option {
-  display: flex;
-  align-items: center; /* Label ve select yan yana hizalı */
-  gap: 5px; /* Label ile select arası boşluk */
 }

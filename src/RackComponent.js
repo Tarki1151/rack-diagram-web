@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Group, Rect, Text, Line } from 'react-konva';
 
 const RackComponent = ({ 
@@ -16,6 +16,7 @@ const RackComponent = ({
   const frameBottom = 576;
   const innerHeight = frameBottom - frameTop;
   const uHeight = innerHeight / rackHeight;
+  const [tooltip, setTooltip] = useState(null);
 
   let adjustedData = Array.isArray(data) && data.length > 0
     ? data.map(item => {
@@ -33,6 +34,32 @@ const RackComponent = ({
     : rackHeight;
 
   const isFullRack = maxU > rackHeight;
+
+  const handleMouseEnter = (e, item) => {
+    const stage = e.target.getStage();
+    const pointerPosition = stage.getPointerPosition();
+    const rawOwner = item.Owner || 'Bilinmiyor';
+    const formattedOwner = rawOwner.toLowerCase().replace(/\b\w/g, char => char.toUpperCase());
+    const owner = formattedOwner.length > 15 ? formattedOwner.slice(0, 15) + '..' : formattedOwner;
+    setTooltip({
+      x: pointerPosition.x - position.x,
+      y: pointerPosition.y - position.y,
+      owner: owner,
+      serial: item.Serial || 'Bilinmiyor'
+    });
+  };
+
+  const handleMouseLeave = () => {
+    setTooltip(null);
+  };
+
+  const formatProductName = (name, u) => {
+    const formattedName = (name || 'Bilinmeyen Model').toLowerCase().replace(/\b\w/g, char => char.toUpperCase());
+    if (u === 1 && formattedName.length > 25) {
+      return formattedName.slice(0, 25) + '..'; // 1U için 25 karakter sınırı
+    }
+    return formattedName;
+  };
 
   return (
     <Group
@@ -54,14 +81,32 @@ const RackComponent = ({
         <Line key={`line-${i}`} points={[20, frameTop + i * uHeight, 160, frameTop + i * uHeight]} stroke="#ccc" strokeWidth={1} />
       ))}
       {Array.from({ length: rackHeight }, (_, i) => (
-        <Text key={`label-${i}`} x={5} y={frameTop + i * uHeight + uHeight / 2 - 6} text={String(rackHeight - i)} fontSize={10} fill="black" align="right" width={15} />
+        <Text key={`label-${i}`} x={5} y={frameTop + i * uHeight + uHeight / 2 - 6} text={String(rackHeight - i)} fontSize={10} fill="black" align="center" width={15} />
       ))}
       {adjustedData.length === 0 ? (
         <Text x={90} y={100} text="Veri Yok" fontSize={16} fill="black" align="center" />
       ) : isFullRack ? (
         <>
-          <Rect x={20} y={frameTop} width={140} height={innerHeight} fill="yellow" stroke="black" strokeWidth={1} />
-          <Text x={25} y={frameTop + innerHeight / 2 - 20} text={adjustedData[0]?.BrandModel || 'Bilinmeyen Model'} fontSize={9} fill="black" align="center" width={130} />
+          <Rect 
+            x={20} 
+            y={frameTop} 
+            width={140} 
+            height={innerHeight} 
+            fill="yellow" 
+            stroke="black" 
+            strokeWidth={1}
+            onMouseEnter={(e) => handleMouseEnter(e, adjustedData[0])}
+            onMouseLeave={handleMouseLeave}
+          />
+          <Text 
+            x={25} 
+            y={frameTop + innerHeight / 2 - 20} 
+            text={formatProductName(adjustedData[0]?.BrandModel, maxU)} 
+            fontSize={9} 
+            fill="black" 
+            align="center" 
+            width={130} 
+          />
           <Text x={25} y={frameTop + innerHeight / 2} text={`42U’dan yüksek ${maxU}U`} fontSize={9} fill="black" align="center" width={130} />
         </>
       ) : (
@@ -76,11 +121,54 @@ const RackComponent = ({
 
           return (
             <React.Fragment key={index}>
-              <Rect x={20} y={rectY} width={140} height={rectHeight} fill={color} stroke="black" strokeWidth={1} />
-              <Text x={20} y={rectY + rectHeight / 2 - 6} text={item.BrandModel || 'Bilinmeyen Model'} fontSize={10} fill="black" align="center" width={140} />
+              <Rect 
+                x={20} 
+                y={rectY} 
+                width={140} 
+                height={rectHeight} 
+                fill={color} 
+                stroke="black" 
+                strokeWidth={1}
+                onMouseEnter={(e) => handleMouseEnter(e, item)}
+                onMouseLeave={handleMouseLeave}
+              />
+              <Text 
+                x={20} 
+                y={rectY + rectHeight / 2 - 6} 
+                text={formatProductName(item.BrandModel, u)} 
+                fontSize={10} 
+                fill="black" 
+                align="center" 
+                width={140} 
+              />
             </React.Fragment>
           );
         })
+      )}
+      {tooltip && (
+        <Group x={tooltip.x} y={tooltip.y}>
+          <Rect
+            width={150}
+            height={60}
+            fill="rgba(0, 0, 0, 0.8)"
+            cornerRadius={5}
+          />
+          <Text
+            text={`Owner: ${tooltip.owner}`}
+            fontSize={10}
+            fill="white"
+            padding={5}
+            width={140}
+          />
+          <Text
+            text={`Serial: ${tooltip.serial}`}
+            fontSize={12}
+            fill="white"
+            padding={5}
+            y={20}
+            width={140}
+          />
+        </Group>
       )}
     </Group>
   );

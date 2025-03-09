@@ -62,15 +62,23 @@ const App = () => {
   const handleAlignmentChange = (e) => setLabelAlignment(e.target.value);
 
   const exportToPNG = () => {
-    const dataURL = stageRef.current.toDataURL();
+    const dataURL = stageRef.current.toDataURL({ pixelRatio: 2 }); // 2x çözünürlük
     const link = document.createElement('a');
     link.href = dataURL;
     link.download = 'rack-diagram.png';
     link.click();
   };
 
+  const exportToJPEG = () => {
+    const dataURL = stageRef.current.toDataURL({ mimeType: 'image/jpeg', quality: 0.9, pixelRatio: 2 }); // 2x, yüksek kalite
+    const link = document.createElement('a');
+    link.href = dataURL;
+    link.download = 'rack-diagram.jpg';
+    link.click();
+  };
+
   const exportToSVG = () => {
-    const svgData = stageRef.current.toDataURL({ mimeType: 'image/svg+xml' });
+    const svgData = stageRef.current.toDataURL({ mimeType: 'image/svg+xml', pixelRatio: 2 });
     const blob = new Blob([svgData], { type: 'image/svg+xml' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
@@ -81,9 +89,12 @@ const App = () => {
   };
 
   const exportToPDF = () => {
-    const pdf = new jsPDF();
-    const imgData = stageRef.current.toDataURL();
-    pdf.addImage(imgData, 'PNG', 10, 10, 180, 0);
+    const pdf = new jsPDF('l', 'mm', 'a4'); // Yatay A4
+    const imgData = stageRef.current.toDataURL({ pixelRatio: 2 });
+    const imgProps = pdf.getImageProperties(imgData);
+    const pdfWidth = pdf.internal.pageSize.getWidth() - 20; // Kenar boşlukları
+    const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
+    pdf.addImage(imgData, 'PNG', 10, 10, pdfWidth, pdfHeight);
     pdf.save('rack-diagram.pdf');
   };
 
@@ -120,6 +131,7 @@ const App = () => {
       </div>
       <div>
         <button onClick={exportToPNG}>PNG İndir</button>
+        <button onClick={exportToJPEG}>JPEG İndir</button>
         <button onClick={exportToSVG}>SVG İndir</button>
         <button onClick={exportToPDF}>PDF İndir</button>
       </div>

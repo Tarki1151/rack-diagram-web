@@ -1,17 +1,16 @@
 .app {
-    text-align: center;
-  }
-  
-  .system-room {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0px; /* Kabinler arası net 5 piksel boşluk */
-    padding: 0;
-    margin: 0;
-  }
-  
-  .rack {
-    margin: 0;
-    padding: 0;
-    display: inline-block; /* Ekstra boşlukları engelle */
-  }
+  text-align: center;
+}
+
+.system-room {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0; /* Ekstra boşluk yok */
+  padding: 0;
+  margin: 0;
+}
+
+.rack {
+  margin: 0;
+  padding: 0;
+}

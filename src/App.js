@@ -25,8 +25,9 @@ const App = () => {
         setCabinets(data);
         setErrors(null);
         const cabinetNames = Object.keys(data);
+        const extraSpace = -18; // Varsayılan 18 piksel boşluğu sıfırlayıp bitişik çizim
         const initialPositions = cabinetNames.reduce((acc, cabinet, i) => {
-          const xPosition =  i * -5 ; //  0 piksel artı boşluk
+          const xPosition = i * extraSpace; // -18 ile bitişik, artırılırsa boşluk eklenir
           acc[cabinet] = { x: xPosition, y: 0 };
           console.log(`Position for ${cabinet}: x=${xPosition}`); // Debug log
           return acc;

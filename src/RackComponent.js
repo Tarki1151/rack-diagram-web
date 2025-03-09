@@ -39,12 +39,12 @@ const RackComponent = ({ cabinet, data, position, handleDrag }) => {
         <h3>{cabinet}</h3>
         <Stage width={200} height={600}>
           <Layer>
-            <Rect x={15} y={frameTop} width={180} height={innerHeight} stroke="black" strokeWidth={2} fill="transparent" />
+            <Rect x={10} y={frameTop} width={180} height={innerHeight} stroke="black" strokeWidth={2} fill="transparent" />
             {Array.from({ length: rackHeight + 1 }, (_, i) => (
               <Line key={`line-${i}`} points={[30, frameTop + i * uHeight, 170, frameTop + i * uHeight]} stroke="#ccc" strokeWidth={1} />
             ))}
             {Array.from({ length: rackHeight }, (_, i) => (
-              <Text key={`label-${i}`} x={13} y={frameTop + i * uHeight + uHeight / 2 - 6} text={String(rackHeight - i)} fontSize={8} fill="black" align="right" width={15} />
+              <Text key={`label-${i}`} x={15} y={frameTop + i * uHeight + uHeight / 2 - 6} text={String(rackHeight - i)} fontSize={10} fill="black" align="right" width={15} />
             ))}
             {adjustedData.length === 0 ? (
               <Text x={100} y={100} text="Veri Yok" fontSize={16} fill="black" align="center" />

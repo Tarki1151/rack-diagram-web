@@ -1,0 +1,5 @@
+pandas
+openpyxl  # .xlsx dosyalarını okumak için pandas tarafından kullanılır
+Flask  # HTTP isteklerini ve dosya yüklemeyi yönetmek için
+gunicorn # Opsiyonel, Flask ile Cloud Functions'da HTTP sunmak için
+functions-framework # GCP Cloud Functions için standart

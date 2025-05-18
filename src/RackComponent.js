@@ -2,74 +2,75 @@ import React, { useState } from 'react';
 import { Group, Rect, Text, Line } from 'react-konva';
 
 const RackComponent = ({
-  cabinet, // Kabin adı (etiket için)
-  name,    // Konva tarafından e.target.name() için kullanılacak (MainApp'ten cabinetName olarak geliyor)
+  cabinet,
+  name,
   data,
-  position, // { x: number, y: number } formatında beklenen pozisyon
+  position,
   handleDragMove,
   handleDragEnd,
-  gridSize, // MainApp'ten gelen gridSize prop'u
+  gridSize,
   labelMargin,
   labelAlignment
 }) => {
-  // 1. Position prop'u için kontrol
   if (!position || typeof position.x === 'undefined' || typeof position.y === 'undefined') {
-    // Pozisyon bilgisi yoksa veya geçersizse, bu bileşeni render etme veya bir uyarı göster
-    console.error(`RackComponent: '${cabinet}' için pozisyon bilgisi (x, y) eksik veya geçersiz. Alınan pozisyon:`, position);
-    return null; // Veya <Text text="Pozisyon hatası" x={0} y={0} />;
+    console.error(`[RackComponent] '${cabinet || name}' için pozisyon bilgisi eksik.`);
+    return null;
   }
 
-  const rackHeight = 42; // Standart U yüksekliği
+  // ... (önceki sabitleriniz: rackUnits, frameWidth, vb.) ...
+  const rackUnits = 42;
   const frameWidth = 180;
-  const deviceAreaWidth = 140; // Cihazların çizileceği alanın genişliği
-  const deviceAreaX = (frameWidth - deviceAreaWidth) / 2; // Cihaz alanının x başlangıcı (ortalamak için)
-
-  const frameTop = 24;    // Kabin çerçevesinin üst boşluğu (U etiketleri için)
-  const frameBottom = 576; // Kabin çerçevesinin alt sınırı (frameTop + innerHeight)
-  const innerHeight = frameBottom - frameTop; // Kabinin iç yüksekliği (U'ların yerleşeceği alan)
-  const uHeight = innerHeight / rackHeight; // Bir U'nun piksel yüksekliği
+  const deviceAreaWidth = 140;
+  const deviceAreaPaddingX = (frameWidth - deviceAreaWidth) / 2;
+  const uLabelAreaWidth = 25;
+  const deviceDrawX = uLabelAreaWidth;
+  const actualDeviceAreaWidth = frameWidth - uLabelAreaWidth - deviceAreaPaddingX;
+  const headerHeight = 30;
+  const footerHeight = 10;
+  const uAreaTopMargin = 5;
+  const totalFrameHeight = 600;
+  const usableDrawHeight = totalFrameHeight - headerHeight - footerHeight - uAreaTopMargin;
+  const uHeight = usableDrawHeight / rackUnits;
 
   const [tooltip, setTooltip] = useState(null);
 
-  // Veri gelmemişse veya boşsa, "Veri Yok" göster
   let adjustedData = Array.isArray(data) && data.length > 0
     ? data.map(item => {
-        const rackValue = String(item.Rack || '1'); // item.Rack null/undefined ise '1' kabul et
-        let startU = parseInt(rackValue.match(/\d+/)?.[0] || 1, 10); // Sayıyı al, bulamazsa 1
-        const u = parseFloat(item.U) || 1; // item.U null/undefined veya geçersizse 1 kabul et
-
-        if (startU === 0) startU = 1; // 0 U diye bir şey olmaz, 1'den başlasın
-        return { ...item, Rack: startU, U: u }; // U değerini de sayısal yap
-      }).filter(item => item && item.Rack > 0 && item.Rack <= 50) // Geçerli U aralığı
+        const rackValue = String(item.Rack || '1');
+        let startU = parseInt(rackValue.match(/\d+/)?.[0] || 1, 10);
+        const u = parseFloat(item.U) || 1;
+        if (startU <= 0) startU = 1;
+        if (startU > rackUnits) startU = rackUnits;
+        return { ...item, Rack: startU, U: u };
+      }).filter(item => item && item.Rack > 0 && item.U > 0)
     : [];
 
-  const maxU = adjustedData.length > 0
+  const maxUoccupied = adjustedData.length > 0
     ? Math.max(...adjustedData.map(item => item.Rack + item.U - 1))
-    : rackHeight;
-
-  const isFullRack = maxU > rackHeight;
+    : 0;
+  const isOverflownRack = maxUoccupied > rackUnits;
 
   const handleMouseEnter = (e, item) => {
-    if (!position) return; // position yoksa tooltip gösterme
+    // ... (önceki handleMouseEnter kodunuz) ...
+    if (!position || !item) return;
     const stage = e.target.getStage();
     if (!stage) return;
     const pointerPosition = stage.getPointerPosition();
     if (!pointerPosition) return;
 
     const rawOwner = item.Owner || 'Bilinmiyor';
-    // Her kelimenin baş harfini büyük yap
     const formattedOwner = rawOwner.toLowerCase().replace(/\b\w/g, char => char.toUpperCase());
-    const owner = formattedOwner.length > 20 ? formattedOwner.slice(0, 20) + '..' : formattedOwner; // Uzunsa kısalt
+    const owner = formattedOwner.length > 25 ? formattedOwner.slice(0, 25) + '..' : formattedOwner;
 
     const serial = item.Serial || 'Bilinmiyor';
-    const formattedSerial = serial.length > 20 ? serial.slice(0, 20) + '..' : serial;
-
+    const formattedSerial = serial.length > 25 ? serial.slice(0, 25) + '..' : serial;
 
     setTooltip({
-      x: pointerPosition.x - position.x + 10, // Tooltip'i imlecin biraz sağına al
-      y: pointerPosition.y - position.y + 10, // Tooltip'i imlecin biraz altına al
+      x: pointerPosition.x - position.x + 15,
+      y: pointerPosition.y - position.y + 15,
       owner: owner,
-      serial: formattedSerial
+      serial: formattedSerial,
+      brandModel: item.BrandModel || 'Bilinmeyen Model'
     });
   };
 
@@ -78,146 +79,174 @@ const RackComponent = ({
   };
 
   const formatProductName = (name, uValue) => {
+    // ... (önceki formatProductName kodunuz) ...
     const formattedName = (name || 'Bilinmeyen Model').toLowerCase().replace(/\b\w/g, char => char.toUpperCase());
-    // Karakter sınırı, cihazın U yüksekliğine ve genel okunabilirliğe göre ayarlanabilir.
-    const maxLength = uValue === 1 ? 22 : (uValue === 2 ? 25 : 30); // Örnek karakter sınırları
+    const maxLength = uValue === 1 ? 20 : (uValue === 2 ? 24 : 28);
     if (formattedName.length > maxLength) {
       return formattedName.slice(0, maxLength) + '..';
     }
     return formattedName;
   };
 
+  let labelX;
+  if (labelAlignment === 'center') {
+    labelX = frameWidth / 2;
+  } else if (labelAlignment === 'right') {
+    labelX = frameWidth;
+  } else {
+    labelX = 0;
+  }
+
+  // Kabin adı boş veya sadece boşluk ise varsayılan bir değer ata veya null yap
+  const displayCabinetName = (cabinet && cabinet.trim() !== "") ? cabinet : "Kabin"; // VEYA null
+
   return (
     <Group
       x={position.x}
       y={position.y}
       draggable
-      onDragMove={(e) => handleDragMove(e, gridSize)} // gridSize prop'unu doğrudan kullan
-      onDragEnd={(e) => handleDragEnd(name, e)} // 'name' prop'u (yani cabinetName) ile çağır
-      name={name} // Konva'nın e.target.name() için kullanacağı
+      onDragMove={(e) => handleDragMove(e, gridSize)}
+      onDragEnd={(e) => handleDragEnd(name, e)}
+      name={name}
     >
-      {/* Kabin Adı Etiketi */}
-      <Text
-        text={cabinet}
-        fontSize={16}
-        fontStyle="bold"
-        fill="black"
-        width={frameWidth}
-        align={labelAlignment} // 'left', 'center', 'right'
-        y={frameTop - labelMargin - 18} // labelMargin'e göre ayarla, 18 yaklaşık font boyutu
-        offsetX={labelAlignment === 'center' ? frameWidth / 2 : (labelAlignment === 'right' ? frameWidth : 0)}
-        x={labelAlignment === 'center' ? frameWidth / 2 : (labelAlignment === 'right' ? frameWidth : 0)}
-      />
+      {/* Kabin Adı Etiketi - 78. satır civarı burası olabilir */}
+      {displayCabinetName && ( // Sadece displayCabinetName geçerliyse Text'i render et
+        <Text
+          text={displayCabinetName} // Düzeltilmiş kabin adı
+          fontSize={16}
+          fontStyle="bold"
+          fill="#333"
+          width={frameWidth}
+          align={labelAlignment}
+          x={labelX}
+          offsetX={labelAlignment === 'center' ? frameWidth / 2 : (labelAlignment === 'right' ? frameWidth : 0)}
+          y={headerHeight - labelMargin - 20}
+        />
+      )}
 
       {/* Kabin Çerçevesi */}
-      <Rect x={0} y={frameTop} width={frameWidth} height={innerHeight} stroke="black" strokeWidth={2} fill="#f9f9f9" />
+      <Rect x={0} y={headerHeight} width={frameWidth} height={usableDrawHeight + uAreaTopMargin} stroke="black" strokeWidth={2} fill="#ECEFF1" />
 
       {/* U Numaralandırması Çizgileri ve Etiketleri */}
-      {Array.from({ length: rackHeight }, (_, i) => {
-        const currentU = rackHeight - i;
-        const yPos = frameTop + i * uHeight;
+      {Array.from({ length: rackUnits }, (_, i) => {
+        const uNumber = rackUnits - i;
+        const yPosition = headerHeight + uAreaTopMargin + i * uHeight;
+        // Metin içeriğinin boş olmadığından emin ol (String(uNumber) her zaman dolu olacaktır)
         return (
-          <React.Fragment key={`u-line-label-${currentU}`}>
-            <Line
-              points={[deviceAreaX, yPos, deviceAreaX + deviceAreaWidth, yPos]}
-              stroke="#ccc"
-              strokeWidth={0.5}
-            />
+          <React.Fragment key={`u-label-${uNumber}`}>
             <Text
-              x={deviceAreaX - 15 > 0 ? deviceAreaX - 15 : 2} // Sol kenara çok yakın olmasın
-              y={yPos + uHeight / 2 - 6}
-              text={String(currentU)}
-              fontSize={10}
-              fill="black"
+              x={uLabelAreaWidth - 18}
+              y={yPosition + (uHeight / 2) - 6}
+              text={String(uNumber)} // Bu her zaman dolu olacak
+              fontSize={9}
+              fill="#555"
               align="right"
-              width={12}
+              width={15}
             />
+            {(uNumber !== 1) && (
+                 <Line
+                    points={[deviceDrawX, yPosition, deviceDrawX + actualDeviceAreaWidth, yPosition]}
+                    stroke="#B0BEC5"
+                    strokeWidth={0.5}
+                 />
+            )}
           </React.Fragment>
         );
       })}
-      {/* Son U çizgisi (en alt) */}
-      <Line
-        points={[deviceAreaX, frameTop + rackHeight * uHeight, deviceAreaX + deviceAreaWidth, frameTop + rackHeight * uHeight]}
-        stroke="#ccc"
-        strokeWidth={0.5}
-      />
-
+       <Line
+          points={[deviceDrawX, headerHeight + uAreaTopMargin + rackUnits * uHeight, deviceDrawX + actualDeviceAreaWidth, headerHeight + uAreaTopMargin + rackUnits * uHeight]}
+          stroke="#B0BEC5"
+          strokeWidth={0.5}
+       />
 
       {/* Cihazların Çizimi */}
-      {adjustedData.length === 0 && !isFullRack ? (
-        <Text x={frameWidth / 2 - 30} y={frameTop + innerHeight / 2 - 10} text="Veri Yok" fontSize={14} fill="grey" />
-      ) : isFullRack ? (
+      {adjustedData.length === 0 && !isOverflownRack ? (
+        <Text
+          x={frameWidth / 2}
+          y={headerHeight + uAreaTopMargin + usableDrawHeight / 2 - 10}
+          text="Veri Yok" // Bu dolu
+          fontSize={14}
+          fill="grey"
+          offsetX={frameWidth / 2 - deviceDrawX / 2 - actualDeviceAreaWidth / 2}
+          width={actualDeviceAreaWidth}
+          align="center"
+        />
+      ) : isOverflownRack && adjustedData.length > 0 ? (
         <>
-          <Rect
-            x={deviceAreaX}
-            y={frameTop}
-            width={deviceAreaWidth}
-            height={innerHeight}
-            fill="lightcoral" // Dolu rack için farklı renk
+          {/* ... (isOverflownRack Text bileşenleri, metinlerin dolu olduğundan emin olun) ... */}
+           <Rect
+            x={deviceDrawX}
+            y={headerHeight + uAreaTopMargin}
+            width={actualDeviceAreaWidth}
+            height={usableDrawHeight}
+            fill="lightcoral"
             stroke="black"
             strokeWidth={1}
-            onMouseEnter={(e) => handleMouseEnter(e, adjustedData[0])} // İlk item'ı temsilci olarak kullan
+            onMouseEnter={(e) => handleMouseEnter(e, adjustedData[0])}
             onMouseLeave={handleMouseLeave}
           />
           <Text
-            x={deviceAreaX + 5}
-            y={frameTop + innerHeight / 2 - 20}
-            text={formatProductName(adjustedData[0]?.BrandModel, rackHeight)} // rackHeight'i U değeri gibi kullan
-            fontSize={9}
+            x={deviceDrawX + 5}
+            y={headerHeight + uAreaTopMargin + usableDrawHeight / 2 - 20}
+            text={formatProductName(adjustedData[0]?.BrandModel, rackUnits)}
+            fontSize={10}
             fill="black"
-            width={deviceAreaWidth - 10}
+            width={actualDeviceAreaWidth - 10}
             align="center"
             verticalAlign="middle"
+            listening={false}
           />
           <Text
-            x={deviceAreaX + 5}
-            y={frameTop + innerHeight / 2}
-            text={`42U’dan yüksek (${maxU}U)`}
+            x={deviceDrawX + 5}
+            y={headerHeight + uAreaTopMargin + usableDrawHeight / 2}
+            text={`${rackUnits}U’dan Yüksek (${maxUoccupied}U)`}
             fontSize={9}
             fill="black"
-            width={deviceAreaWidth - 10}
+            width={actualDeviceAreaWidth - 10}
             align="center"
             verticalAlign="middle"
+            listening={false}
           />
         </>
       ) : (
         adjustedData.map((item, index) => {
-          const startU = item.Rack; // Zaten sayısal ve ayarlanmış
-          const u = item.U;         // Zaten sayısal ve ayarlanmış
+          // ... (cihaz Rect ve Text bileşenleri, metinlerin dolu olduğundan emin olun) ...
+          const startU = item.Rack;
+          const uSize = item.U;
+          const rectY = headerHeight + uAreaTopMargin + (rackUnits - (startU + uSize -1)) * uHeight;
+          const rectHeight = uSize * uHeight;
 
-          const color = (item.Face && item.Face.toLowerCase() === 'arka') ? 'orange' : 'lightblue';
+          if (rectY < headerHeight + uAreaTopMargin || (rectY + rectHeight) > (headerHeight + uAreaTopMargin + usableDrawHeight + 1) ) {
+             console.warn(`[RackComponent] Cihaz '${item.BrandModel}' kabin sınırları dışında kalıyor. U:${startU}-${startU+uSize-1}`);
+          }
 
-          // Y pozisyonu hesaplaması: U numaraları yukarıdan aşağıya artar (1 en üstte),
-          // ancak çizim koordinatları yukarıdan aşağıya artar.
-          // Bu nedenle (rackHeight - (startU + u - 1)) U'nun tepesini verir.
-          const rectY = frameTop + (rackHeight - (startU + u - 1)) * uHeight;
-          const rectHeight = u * uHeight;
+          const color = (item.Face && item.Face.toLowerCase() === 'arka') ? '#FFAB91' : '#90CAF9';
 
           return (
-            <React.Fragment key={index}>
+            <React.Fragment key={`${name}-device-${index}`}>
               <Rect
-                x={deviceAreaX}
+                x={deviceDrawX}
                 y={rectY}
-                width={deviceAreaWidth}
-                height={rectHeight}
+                width={actualDeviceAreaWidth}
+                height={rectHeight -1}
                 fill={color}
-                stroke="black"
-                strokeWidth={1}
+                stroke="#546E7A"
+                strokeWidth={0.5}
                 cornerRadius={2}
                 onMouseEnter={(e) => handleMouseEnter(e, item)}
                 onMouseLeave={handleMouseLeave}
               />
               <Text
-                x={deviceAreaX + 5} // İçeriden biraz boşluk
-                y={rectY + rectHeight / 2 - 6} // Metni dikeyde ortala
-                text={formatProductName(item.BrandModel, u)}
-                fontSize={u > 1 ? 10 : 9} // 1U için daha küçük font
-                fill="black"
-                width={deviceAreaWidth - 10} // İçeriden biraz boşluk
+                x={deviceDrawX + 5}
+                y={rectY + rectHeight / 2 - (uSize > 1 ? 7 : 6)}
+                text={formatProductName(item.BrandModel, uSize)} // formatProductName zaten "Bilinmeyen Model" döndürüyor
+                fontSize={uSize > 2 ? 10 : (uSize > 1 ? 9 : 8)}
+                fill="#263238"
+                width={actualDeviceAreaWidth - 10}
                 align="center"
                 verticalAlign="middle"
                 padding={2}
-                listening={false} // Metinlerin mouse event'lerini almasını engelle (Rect alsın)
+                listening={false}
               />
             </React.Fragment>
           );
@@ -226,34 +255,46 @@ const RackComponent = ({
 
       {/* Tooltip */}
       {tooltip && (
-        <Group x={tooltip.x} y={tooltip.y}>
+        <Group x={tooltip.x} y={tooltip.y} listening={false}>
+          {/* ... (Tooltip Rect ve Text bileşenleri, metinlerin dolu olduğundan emin olun) ... */}
           <Rect
-            width={160} // Biraz daha geniş
-            height={50} // Biraz daha yüksek
-            fill="rgba(0, 0, 0, 0.85)"
-            stroke="rgba(255, 255, 255, 0.5)"
+            width={Math.max(170, (tooltip.brandModel || "").length * 6 + 20)}
+            height={65}
+            fill="rgba(0, 0, 0, 0.88)"
+            stroke="#78909C"
             strokeWidth={0.5}
-            cornerRadius={5}
+            cornerRadius={6}
             shadowColor="black"
-            shadowBlur={5}
+            shadowBlur={6}
             shadowOpacity={0.3}
+            shadowOffsetX={2}
+            shadowOffsetY={2}
           />
           <Text
-            text={`Owner: ${tooltip.owner}`}
+            text={`${tooltip.brandModel || 'N/A'}`}
             fontSize={11}
-            fill="white"
+            fontStyle="bold"
+            fill="#E3F2FD"
             padding={8}
-            width={150} // İçerik için genişlik
-            lineHeight={1.4}
+            width={Math.max(160, (tooltip.brandModel || "").length * 6 + 10)}
           />
           <Text
-            text={`Serial: ${tooltip.serial}`}
-            fontSize={11}
-            fill="white"
+            text={`Owner: ${tooltip.owner || 'N/A'}`}
+            fontSize={10}
+            fill="#CFD8DC"
             padding={8}
-            y={22} // İkinci satır için y pozisyonu
-            width={150}
-            lineHeight={1.4}
+            y={22}
+            width={160}
+            lineHeight={1.3}
+          />
+          <Text
+            text={`Serial: ${tooltip.serial || 'N/A'}`}
+            fontSize={10}
+            fill="#CFD8DC"
+            padding={8}
+            y={38}
+            width={160}
+            lineHeight={1.3}
           />
         </Group>
       )}

@@ -1,101 +1,99 @@
-import React, { useState, useRef, useEffect } from 'react';
+// src/MainApp.js
+
+import React, { useState, useRef, useEffect, Suspense } from 'react';
 import { Link } from 'react-router-dom';
 import UploadComponent from './UploadComponent';
-import RackComponent from './RackComponent';
+import RackComponent3D from './RackComponent3D';
 import './App.css';
-import { Stage, Layer } from 'react-konva';
+import { Canvas } from '@react-three/fiber';
+import { OrbitControls, Html, Grid } from '@react-three/drei';
 import { jsPDF } from 'jspdf';
 
 const CLOUD_FUNCTION_URL = 'https://europe-north1-rackcizimweb.cloudfunctions.net/rack-diagram-processor';
+
+// --- RackComponent3D'den alınan ve MainApp'te de kullanılacak sabitler ---
+// --- Temel Ölçüler (Ölçekleme Öncesi) ---
+const BASE_U_HEIGHT_FOR_MAIN = 0.0889; 
+const BASE_RACK_TOP_BOTTOM_THICKNESS_FOR_MAIN = 0.1;
+const CABINET_SCALE_FACTOR_FOR_MAIN = 2.3; 
+const RACK_TOTAL_U_FOR_MAIN = 42;
+
+// --- Ölçeklenmiş Sabitler (MainApp içinde kabin yüksekliğini hesaplamak için) ---
+const U_HEIGHT_FOR_MAIN = BASE_U_HEIGHT_FOR_MAIN * CABINET_SCALE_FACTOR_FOR_MAIN;
+const RACK_VERTICAL_POST_HEIGHT_FOR_MAIN = RACK_TOTAL_U_FOR_MAIN * U_HEIGHT_FOR_MAIN;
+const RACK_TOP_BOTTOM_THICKNESS_FOR_MAIN = BASE_RACK_TOP_BOTTOM_THICKNESS_FOR_MAIN * CABINET_SCALE_FACTOR_FOR_MAIN;
+const RACK_TOTAL_FRAME_HEIGHT_FOR_MAIN = RACK_VERTICAL_POST_HEIGHT_FOR_MAIN + 2 * RACK_TOP_BOTTOM_THICKNESS_FOR_MAIN;
+// --- Bitiş: RackComponent3D'den alınan sabitler ---
+
+
+const BASE_CABINET_WIDTH_3D = 2; // 3D dünyasında bir kabinin temel genişliği (yerleşim için)
+const BASE_CABINET_SPACING_3D = 1; // Kabinler arası temel boşluk (yerleşim için)
 
 const MainApp = () => {
   const [cabinets, setCabinets] = useState({});
   const [positions, setPositions] = useState({});
   const [file, setFile] = useState(null);
   const [errors, setErrors] = useState(null);
-  const [gridSize, setGridSize] = useState(10);
-  const [labelMargin, setLabelMargin] = useState(0);
-  const [labelAlignment, setLabelAlignment] = useState('center');
-  const [zoomLevel, setZoomLevel] = useState(1); // zoomLevel state'i burada tanımlı
-  const stageRef = useRef(null);
+  const [isLoading, setIsLoading] = useState(false);
+  
+  const canvasRef = useRef();
 
   useEffect(() => {
     window.scrollTo(0, 0);
   }, []);
 
-  // EKSİK OLAN FONKSİYONLAR:
-  const handleZoomIn = () => {
-    console.log('[MainApp] handleZoomIn çağrıldı.'); // Kontrol için log
-    setZoomLevel(prev => {
-      const newZoom = Math.min(prev * 1.1, 3); // Maksimum 3x zoom
-      console.log('[MainApp] Yeni zoom seviyesi (yakınlaştır):', newZoom);
-      return newZoom;
-    });
-  };
-
-  const handleZoomOut = () => {
-    console.log('[MainApp] handleZoomOut çağrıldı.'); // Kontrol için log
-    setZoomLevel(prev => {
-      const newZoom = Math.max(prev / 1.1, 0.2); // Minimum 0.2x zoom
-      console.log('[MainApp] Yeni zoom seviyesi (uzaklaştır):', newZoom);
-      return newZoom;
-    });
-  };
-  // EKSİK OLAN FONKSİYONLARIN SONU
-
   const initializePositions = (cabinetsData) => {
-    // ... (önceki initializePositions kodu) ...
-    console.log('[MainApp] initializePositions - Gelen cabinetsData:', cabinetsData);
     if (!cabinetsData || typeof cabinetsData !== 'object' || Object.keys(cabinetsData).length === 0) {
-      console.warn('[MainApp] initializePositions: cabinetsData boş veya geçersiz. Pozisyonlar boşaltılıyor.');
       setPositions({});
       return;
     }
     const cabinetNames = Object.keys(cabinetsData);
-    const cabinetWidth = 180;
-    const cabinetSpacing = 20;
-    const newPositions = cabinetNames.reduce((acc, cabinet, i) => {
-      const xPosition = i * (cabinetWidth + cabinetSpacing);
-      acc[cabinet] = { x: xPosition, y: 20 };
+    
+    // Kabinlerin yerleşimi için ölçekleme ve boşluk ayarları
+    const cabinetLayoutScaleFactor = 1.5; // Bu, MainApp'teki yerleşim genişliğini etkiler, RackComponent3D'deki CABINET_SCALE_FACTOR ile aynı olmak zorunda değil.
+                                        // Ancak tutarlılık için RackComponent3D'deki CABINET_SCALE_FACTOR'ı kullanalım.
+    const currentCabinetScaleFactor = CABINET_SCALE_FACTOR_FOR_MAIN; // RackComponent3D'deki ile aynı
+    const spacingReductionFactor = 0; // Kabinler arası boşluk sıfır
+
+    const scaledCabinetWidthForLayout = BASE_CABINET_WIDTH_3D * currentCabinetScaleFactor; // Yerleşimde kaplayacağı genişlik
+    const reducedCabinetSpacing3D = BASE_CABINET_SPACING_3D * spacingReductionFactor; 
+    
+    // Kabinlerin tabanının Y=0 (grid düzlemi) üzerinde olması için
+    // kabinin Y pozisyonu, toplam yüksekliğinin yarısı olmalı.
+    const initialYPosition = RACK_TOTAL_FRAME_HEIGHT_FOR_MAIN / 2; 
+
+    const newPositions = cabinetNames.reduce((acc, cabinetName, i) => {
+      const totalWidthForLayout = (cabinetNames.length * scaledCabinetWidthForLayout) + Math.max(0, (cabinetNames.length - 1) * reducedCabinetSpacing3D);
+      const firstCabinetX = -totalWidthForLayout / 2 + scaledCabinetWidthForLayout / 2;
+      const xPosition = firstCabinetX + i * (scaledCabinetWidthForLayout + reducedCabinetSpacing3D);
+      acc[cabinetName] = { x: xPosition, y: initialYPosition, z: 0 };
       return acc;
     }, {});
-    console.log('[MainApp] initializePositions - Ayarlanan yeni pozisyonlar:', newPositions);
     setPositions(newPositions);
   };
 
   const uploadFile = async () => {
-    // ... (önceki uploadFile kodu) ...
     if (!file) {
-      setErrors({ upload: 'Lütfen bir dosya seçin.' });
+      setErrors({ upload: 'Lütfen işlemek için bir Excel dosyası seçin.' });
       return;
     }
     setErrors(null);
     setCabinets({});
     setPositions({});
+    setIsLoading(true);
 
     try {
       const formData = new FormData();
       formData.append('file', file);
-
-      console.log('[MainApp] uploadFile - Dosya gönderiliyor:', CLOUD_FUNCTION_URL);
-      const response = await fetch(CLOUD_FUNCTION_URL, {
-        method: 'POST',
-        body: formData,
-      });
-
-      console.log('[MainApp] uploadFile - Sunucu yanıt durumu:', response.status);
+      const response = await fetch(CLOUD_FUNCTION_URL, { method: 'POST', body: formData });
       const responseData = await response.json();
-      console.log('[MainApp] uploadFile - Sunucudan gelen veri:', responseData);
 
       if (!response.ok) {
         const errorDetail = responseData.error || responseData.errors || `Sunucu hatası: ${response.status}`;
-        console.error('[MainApp] uploadFile - Sunucudan gelen hata:', errorDetail);
         setErrors(typeof errorDetail === 'string' ? { upload: errorDetail } : errorDetail);
         return;
       }
-
       if (responseData.errors && Object.keys(responseData.errors).length > 0) {
-        console.warn('[MainApp] uploadFile - Sunucudan doğrulama hataları alındı:', responseData.errors);
         setErrors(responseData.errors);
         const validCabinets = { ...responseData };
         delete validCabinets.errors;
@@ -110,218 +108,159 @@ const MainApp = () => {
         setErrors(null);
         initializePositions(responseData);
       }
-
     } catch (error) {
-      console.error('[MainApp] uploadFile - İstemci tarafı hata:', error);
-      setErrors({ upload: 'Dosya gönderilirken/işlenirken bir hata: ' + error.message });
+      setErrors({ upload: 'Dosya gönderilirken/işlenirken bir ağ hatası: ' + error.message });
       setCabinets({});
       setPositions({});
+    } finally {
+      setIsLoading(false);
     }
   };
-
-  const handleDragMove = (e, currentGridSize) => {
-    // ... (önceki handleDragMove kodu) ...
-    const target = e.target;
-    if (!target || typeof target.x !== 'function' || typeof target.y !== 'function') {
-        console.warn('[MainApp] handleDragMove: e.target veya x/y fonksiyonları tanımsız.', target);
-        return;
-    }
-    const newX = currentGridSize > 0 ? Math.round(target.x() / currentGridSize) * currentGridSize : target.x();
-    const newY = currentGridSize > 0 ? Math.round(target.y() / currentGridSize) * currentGridSize : target.y();
-    target.x(newX);
-    target.y(newY);
-  };
-
-  const handleDragEnd = (cabinetName, e) => {
-    // ... (önceki handleDragEnd kodu) ...
-    console.log('[MainApp] handleDragEnd tetiklendi. Kabin:', cabinetName, 'Event objesi:', e);
-    
-    if (!e || !e.target) {
-      console.error('[MainApp] handleDragEnd: Event (e) veya e.target tanımsız! Sürükleme işlemi iptal edildi.', 'e:', e);
-      return;
-    }
-
-    if (typeof e.target.x !== 'function' || typeof e.target.y !== 'function') {
-      console.error('[MainApp] handleDragEnd: e.target üzerinde x() veya y() fonksiyonları bulunamadı!', 'e.target:', e.target);
-      return;
-    }
-
-    const newX = e.target.x();
-    const newY = e.target.y();
-    console.log(`[MainApp] handleDragEnd: Kabin '${cabinetName}' için yeni pozisyon: x=${newX}, y=${newY}`);
-
-    setPositions(prevPositions => {
-      console.log('[MainApp] handleDragEnd - setPositions içi. Önceki pozisyonlar:', prevPositions);
-      const updatedPositions = {
-        ...prevPositions,
-        [cabinetName]: { x: newX, y: newY }
-      };
-      console.log('[MainApp] handleDragEnd - setPositions içi. Güncellenmiş pozisyonlar:', updatedPositions);
-      return updatedPositions;
-    });
-  };
-
-  const handleGridChange = (e) => setGridSize(parseInt(e.target.value, 10));
-  const handleMarginChange = (e) => setLabelMargin(parseInt(e.target.value, 10));
-  const handleAlignmentChange = (e) => setLabelAlignment(e.target.value);
-
-  // handleZoomIn ve handleZoomOut yukarıda tanımlandı.
 
   const exportToPNG = () => {
-    // ... (önceki exportToPNG kodu) ...
-    if (!stageRef.current) return;
-    const dataURL = stageRef.current.toDataURL({ pixelRatio: 2 });
-    const link = document.createElement('a');
-    link.href = dataURL;
-    link.download = 'rack-diagram.png';
-    link.click();
+    const gl = canvasRef.current?.gl;
+    if (gl) {
+      gl.preserveDrawingBuffer = true; 
+      const dataURL = gl.domElement.toDataURL('image/png');
+      gl.preserveDrawingBuffer = false;
+      const link = document.createElement('a');
+      link.href = dataURL;
+      link.download = 'rack-diagram-3d.png';
+      link.click();
+    } else {
+      alert('3D sahne henüz hazır değil veya bulunamadı.');
+    }
   };
 
   const exportToSVG = () => {
-    // ... (önceki exportToSVG kodu) ...
-    if (!stageRef.current) return;
-    alert('SVG dışa aktarma şu anda doğrudan desteklenmiyor. PNG veya PDF olarak dışa aktarabilirsiniz.');
+    alert('3D modellerin SVG olarak dışa aktarılması karmaşıktır ve şu anda desteklenmemektedir.');
   };
 
   const exportToPDF = () => {
-    // ... (önceki exportToPDF kodu) ...
-    if (!stageRef.current) return;
-    const dataURL = stageRef.current.toDataURL({ pixelRatio: 2 });
-    const pdf = new jsPDF({
-      orientation: Object.keys(cabinets).length > 3 ? 'l' : 'p',
-      unit: 'mm',
-      format: 'a4'
-    });
-    const imgProps = pdf.getImageProperties(dataURL);
-    const pdfWidth = pdf.internal.pageSize.getWidth() - 20;
-    const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
-    let pageHeight = pdf.internal.pageSize.getHeight() - 20;
-
-    if (pdfHeight > pageHeight) {
+    const gl = canvasRef.current?.gl;
+    if (gl) {
+      gl.preserveDrawingBuffer = true;
+      const dataURL = gl.domElement.toDataURL('image/png');
+      gl.preserveDrawingBuffer = false;
+      const pdf = new jsPDF({ orientation: 'l', unit: 'mm', format: 'a4' });
+      const imgProps = pdf.getImageProperties(dataURL);
+      const margin = 10;
+      const pdfWidth = pdf.internal.pageSize.getWidth() - 2 * margin;
+      const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
+      let pageHeight = pdf.internal.pageSize.getHeight() - 2 * margin;
+      if (pdfHeight > pageHeight) {
         const newPdfWidth = (imgProps.width * pageHeight) / imgProps.height;
-        pdf.addImage(dataURL, 'PNG', 10, 10, newPdfWidth, pageHeight);
+        pdf.addImage(dataURL, 'PNG', margin, margin, newPdfWidth, pageHeight);
+      } else {
+        pdf.addImage(dataURL, 'PNG', margin, margin, pdfWidth, pdfHeight);
+      }
+      pdf.save('rack-diagram-3d.pdf');
     } else {
-        pdf.addImage(dataURL, 'PNG', 10, 10, pdfWidth, pdfHeight);
+      alert('3D sahne henüz hazır değil veya bulunamadı.');
     }
-    pdf.save('rack-diagram.pdf');
   };
 
-  const renderErrors = (errorsObject) => {
-    // ... (önceki renderErrors kodu) ...
-    if (!errorsObject) return null;
-    if (typeof errorsObject === 'string') {
-      return <div style={{ color: 'red', marginTop: '10px' }}>{errorsObject}</div>;
+  const renderErrors = (errorsData) => {
+    if (!errorsData) return null;
+    let errorMessages = [];
+    if (typeof errorsData === 'string') {
+      errorMessages.push(<p key="single-error">{errorsData}</p>);
+    } else if (typeof errorsData === 'object') {
+      Object.entries(errorsData).forEach(([key, value]) => {
+        if (key === 'upload' && typeof value === 'string') {
+          errorMessages.push(<p key={key}><strong>Genel Yükleme Hatası:</strong> {value}</p>);
+        } else if (Array.isArray(value)) {
+          errorMessages.push(
+            <div key={key}>
+              <strong>Sayfa '{key}' için hatalar:</strong>
+              <ul>
+                {value.map((err, index) => (
+                  <li key={index}>{typeof err === 'object' ? JSON.stringify(err) : err}</li>
+                ))}
+              </ul>
+            </div>
+          );
+        } else if (typeof value === 'string') {
+           errorMessages.push(<p key={key}><strong>{key}:</strong> {value}</p>);
+        }
+      });
     }
+    if (errorMessages.length === 0) return null;
     return (
-      <div style={{ color: 'red', marginTop: '10px', textAlign: 'left' }}>
-        <h4>Hatalar:</h4>
-        {Object.entries(errorsObject).map(([key, value]) => {
-          if (key === 'upload' && typeof value === 'string') {
-            return <p key={key}>{value}</p>;
-          }
-          if (Array.isArray(value)) {
-            return (
-              <div key={key}>
-                <strong>Sayfa '{key}':</strong>
-                <ul>
-                  {value.map((err, index) => (
-                    <li key={index}>{typeof err === 'object' ? JSON.stringify(err) : err}</li>
-                  ))}
-                </ul>
-              </div>
-            );
-          }
-          if (typeof value === 'object' && value !== null) {
-            return <p key={key}>{key}: {JSON.stringify(value)}</p>;
-          }
-          return <p key={key}>{key}: {String(value)}</p>;
-        })}
+      <div className="error-container">
+        <h4>Hata Oluştu:</h4>
+        {errorMessages}
       </div>
     );
   };
-
+  
   return (
     <div className="app-container">
       <div className="app-content">
-        <h1>Rack Diagram Web</h1>
-        <UploadComponent setFile={setFile} uploadFile={uploadFile} />
+        <h1>Rack Diagram Web (3D Versiyon)</h1>
+        <UploadComponent setFile={setFile} uploadFile={uploadFile} disabled={isLoading} />
+        {isLoading && <div className="loading-indicator">Dosya işleniyor, lütfen bekleyin...</div>}
         {renderErrors(errors)}
-        <div className="options-container">
-          {/* ... (options selectları) ... */}
-          <div className="option">
-            <label htmlFor="gridSize">Snap-to-Grid: </label>
-            <select id="gridSize" value={gridSize} onChange={handleGridChange}>
-              <option value={0}>Izgara Yok</option>
-              <option value={10}>10x10</option>
-              <option value={20}>20x20</option>
-              <option value={50}>50x50</option>
-            </select>
+        {!isLoading && Object.keys(cabinets).length === 0 && !errors && (
+          <div className="empty-state-info">
+            <p>3D kabinleri görmek için bir Excel dosyası yükleyin.</p>
           </div>
-          <div className="option">
-            <label htmlFor="labelMargin">Etiket Boşluğu: </label>
-            <select id="labelMargin" value={labelMargin} onChange={handleMarginChange}>
-              <option value={0}>0px (Bitişik)</option>
-              <option value={5}>5px</option>
-              <option value={10}>10px</option>
-              <option value={15}>15px</option>
-              <option value={20}>20px</option>
-            </select>
-          </div>
-          <div className="option">
-            <label htmlFor="labelAlignment">Etiket Hizalama: </label>
-            <select id="labelAlignment" value={labelAlignment} onChange={handleAlignmentChange}>
-              <option value="left">Sol</option>
-              <option value="center">Orta</option>
-              <option value="right">Sağ</option>
-            </select>
-          </div>
-        </div>
+        )}
+
         <div className="button-container">
           <Link to="/">
             <button className="help-button">Nasıl Kullanılır?</button>
           </Link>
-          {/* Butonların onClick olayları doğru fonksiyonlara bağlanmalı */}
-          <button onClick={handleZoomIn}>Yakınlaştır</button>
-          <button onClick={handleZoomOut}>Uzaklaştır</button>
-          <button onClick={exportToPNG}>PNG İndir</button>
-          <button onClick={exportToSVG} title="Gerçek vektörel SVG için ek geliştirme gereklidir.">SVG İndir (Beta)</button>
-          <button onClick={exportToPDF}>PDF İndir</button>
+          <button onClick={exportToPNG} disabled={isLoading || Object.keys(cabinets).length === 0}>PNG İndir</button>
+          <button onClick={exportToSVG} disabled={isLoading || Object.keys(cabinets).length === 0}>SVG İndir (Beta)</button>
+          <button onClick={exportToPDF} disabled={isLoading || Object.keys(cabinets).length === 0}>PDF İndir</button>
         </div>
-        <div style={{ border: '1px solid #ccc', width: '100%', height: '70vh', overflow: 'auto', marginTop: '20px' }}>
-          <Stage
-            width={window.innerWidth * 2}
-            height={window.innerHeight * 1.5}
-            scaleX={zoomLevel}
-            scaleY={zoomLevel}
-            ref={stageRef}
-            style={{ backgroundColor: '#f0f0f0' }}
-          >
-            <Layer>
+
+        <div className="stage-container" style={{ height: '80vh' }}>
+          <Canvas ref={canvasRef} camera={{ position: [0, RACK_TOTAL_FRAME_HEIGHT_FOR_MAIN * 0.6, 20], fov: 50 }}> {/* Kamera Y pozisyonu ayarlandı */}
+            <ambientLight intensity={Math.PI / 1.5} />
+            <directionalLight position={[15, 20, 15]} intensity={Math.PI} castShadow shadow-mapSize-width={2048} shadow-mapSize-height={2048} />
+            <pointLight position={[-15, -15, -15]} decay={0} intensity={Math.PI * 0.5} />
+            
+            <Grid 
+                position={[0, 0, 0]} // Izgarayı Y=0 düzlemine yerleştir
+                args={[40, 40]} // Izgara boyutu artırıldı
+                cellSize={1 * CABINET_SCALE_FACTOR_FOR_MAIN} // Hücre boyutu kabin ölçeğiyle orantılı
+                cellThickness={1}
+                cellColor={"#cccccc"} // Daha açık gri
+                sectionSize={5 * CABINET_SCALE_FACTOR_FOR_MAIN} 
+                sectionThickness={1.5}
+                sectionColor={"#bbbbbb"} // Daha açık gri
+                fadeDistance={100} 
+                fadeStrength={1}
+                infiniteGrid
+                followCamera={false}
+            />
+
+            <Suspense fallback={<Html center><div className="loading-indicator">3D Sahne Yükleniyor...</div></Html>}>
               {Object.entries(cabinets).map(([cabinetName, data]) => {
                 const currentPosition = positions[cabinetName];
-                // console.log(`[MainApp] Render RackComponent: Kabin='${cabinetName}', Pozisyon=`, currentPosition, 'Veri var mı=', !!data);
-                if (currentPosition && typeof currentPosition.x === 'number' && typeof currentPosition.y === 'number') {
+                if (currentPosition && typeof currentPosition.x === 'number' && typeof currentPosition.y === 'number' && typeof currentPosition.z === 'number') {
                   return (
-                    <RackComponent
+                    <RackComponent3D
                       key={cabinetName}
-                      cabinet={cabinetName}
-                      name={cabinetName}
-                      data={data}
-                      position={currentPosition}
-                      handleDragMove={(evt) => handleDragMove(evt, gridSize)}
-                      handleDragEnd={(evt) => handleDragEnd(cabinetName, evt)}
-                      gridSize={gridSize}
-                      labelMargin={labelMargin}
-                      labelAlignment={labelAlignment}
+                      cabinetName={cabinetName}
+                      devicesData={data}
+                      position={[currentPosition.x, currentPosition.y, currentPosition.z]} // Bu Y pozisyonu kabinin merkezini hedefler
                     />
                   );
-                } else {
-                  // console.warn(`[MainApp] RackComponent render edilemiyor: Kabin='${cabinetName}' için pozisyon bulunamadı veya geçersiz.`, currentPosition);
-                  return null;
                 }
+                return null;
               })}
-            </Layer>
-          </Stage>
+            </Suspense>
+            <OrbitControls 
+              makeDefault
+              minDistance={1} 
+              maxDistance={150}
+              enablePan={true}
+              target={[0, RACK_TOTAL_FRAME_HEIGHT_FOR_MAIN / 3, 0]} // Kameranın odak noktasını biraz yukarı al
+            />
+          </Canvas>
         </div>
       </div>
     </div>

@@ -9,7 +9,7 @@ import { Stage, Layer } from 'react-konva';
 import { Canvas } from '@react-three/fiber';
 import { OrbitControls, Html, Grid } from '@react-three/drei';
 import { jsPDF } from 'jspdf';
-import * as PptxGenJS from 'pptxgenjs';
+import PptxGenJS from 'pptxgenjs';
 
 // GCP Cloud Function URL
 const CLOUD_FUNCTION_URL = 'https://europe-north1-rackcizimweb.cloudfunctions.net/rack-diagram-processor'; // Remove the markdown link format
@@ -270,7 +270,7 @@ const MainApp = () => {
     
     try {
       // Yeni bir PPTX sunusu oluştur
-      const pptx = new PptxGenJS.default();
+      const pptx = new PptxGenJS();
       const slide = pptx.addSlide();
       
       // Sunu başlığı ekle

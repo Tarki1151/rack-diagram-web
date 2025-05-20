@@ -2,15 +2,16 @@
 import React, { useState, useRef, useEffect, Suspense } from 'react';
 import { Link } from 'react-router-dom';
 import UploadComponent from './UploadComponent';
-import RackComponent from './RackComponent'; // Orijinal 2D Bileşen
-import RackComponent3D from './RackComponent3D'; // 3D Bileşen
+import RackComponent from './RackComponent';
+import RackComponent3D from './RackComponent3D';
 import './App.css';
 import { Stage, Layer } from 'react-konva';
 import { Canvas } from '@react-three/fiber';
 import { OrbitControls, Html, Grid } from '@react-three/drei';
 import { jsPDF } from 'jspdf';
 
-const CLOUD_FUNCTION_URL = 'https://europe-north1-rackcizimweb.cloudfunctions.net/rack-diagram-processor';
+// GCP Cloud Function URL
+const CLOUD_FUNCTION_URL = 'https://europe-north1-rackcizimweb.cloudfunctions.net/rack-diagram-processor'; // Remove the markdown link format
 
 // --- 3D Kabin Boyutları ---
 const R3D_BASE_U_HEIGHT = 0.0889; 
@@ -33,12 +34,12 @@ const MainApp = () => {
   const [cabinets, setCabinets] = useState({});
   const [positions2D, setPositions2D] = useState({});
   const [positions3D, setPositions3D] = useState({});
+  
   const [file, setFile] = useState(null);
   const [errors, setErrors] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
-  const [viewMode, setViewMode] = useState('3D');
+  const [viewMode, setViewMode] = useState('3D'); // Varsayılan 3D
 
-  // 2D Stage için state'ler
   const [stage2DScale, setStage2DScale] = useState(1);
   const [stage2DPosition, setStage2DPosition] = useState({ x: 0, y: 0 });
 
@@ -93,11 +94,11 @@ const MainApp = () => {
   };
 
   const uploadFile = async () => {
-    // ... (uploadFile kodu aynı kalır)
     if (!file) {
       setErrors({ upload: 'Lütfen işlemek için bir Excel dosyası seçin.' });
       return;
     }
+    
     setErrors(null);
     setCabinets({});
     setPositions2D({});
@@ -107,33 +108,57 @@ const MainApp = () => {
     try {
       const formData = new FormData();
       formData.append('file', file);
-      const response = await fetch(CLOUD_FUNCTION_URL, { method: 'POST', body: formData });
-      const responseData = await response.json();
+      
+      const response = await fetch(CLOUD_FUNCTION_URL, {
+        method: 'POST',
+        body: formData,
+        // CORS headers are handled by the Cloud Function
+      });
+
+      let responseData;
+      try {
+        responseData = await response.json();
+      } catch (jsonError) {
+        console.error('JSON parse error:', jsonError);
+        throw new Error('Sunucudan geçersiz yanıt alındı');
+      }
 
       if (!response.ok) {
-        const errorDetail = responseData.error || responseData.errors || `Sunucu hatası: ${response.status}`;
-        setErrors(typeof errorDetail === 'string' ? { upload: errorDetail } : errorDetail);
-        setCabinets({}); 
-        return;
+        const errorDetail = responseData?.error || 
+                         responseData?.errors || 
+                         `Sunucu hatası: ${response.status} ${response.statusText}`;
+        throw new Error(typeof errorDetail === 'string' ? errorDetail : JSON.stringify(errorDetail));
       }
-      if (responseData.errors && Object.keys(responseData.errors).length > 0) {
-        setErrors(responseData.errors);
-        const validCabinets = { ...responseData };
-        delete validCabinets.errors;
-        if (Object.keys(validCabinets).length > 0) {
-          setCabinets(validCabinets);
-          initializePositions(validCabinets);
+
+      // Check if we have valid data in the response
+      if (responseData && typeof responseData === 'object') {
+        if (Object.keys(responseData).length > 0) {
+          // Check if there are errors in the response
+          if (responseData.errors && Object.keys(responseData.errors).length > 0) {
+            setErrors(responseData.errors);
+            // Still try to process valid cabinets if any
+            const validCabinets = { ...responseData };
+            delete validCabinets.errors;
+            if (Object.keys(validCabinets).length > 0) {
+              setCabinets(validCabinets);
+              initializePositions(validCabinets);
+            }
+          } else {
+            // No errors, process the data
+            setCabinets(responseData);
+            initializePositions(responseData);
+          }
         } else {
-          setCabinets({});
+          throw new Error('Boş veri yanıtı alındı');
         }
       } else {
-        setCabinets(responseData);
-        setErrors(null);
-        initializePositions(responseData);
+        throw new Error('Geçersiz yanıt formatı');
       }
     } catch (error) {
-      setErrors({ upload: 'Dosya gönderilirken/işlenirken bir ağ hatası: ' + error.message });
-      setCabinets({});
+      console.error('Upload error:', error);
+      setErrors({ 
+        upload: `Dosya işlenirken bir hata oluştu: ${error.message || 'Bilinmeyen hata'}` 
+      });
     } finally {
       setIsLoading(false);
     }
@@ -158,11 +183,10 @@ const MainApp = () => {
     target.y(newY);
   };
 
-  // --- 2D Stage Zoom ve Pan Fonksiyonları ---
   const handleZoom2D = (zoomIn) => {
     const scaleBy = 1.2;
     let newScale = zoomIn ? stage2DScale * scaleBy : stage2DScale / scaleBy;
-    newScale = Math.max(0.2, Math.min(newScale, 3)); // Zoom limitleri
+    newScale = Math.max(0.2, Math.min(newScale, 3));
     setStage2DScale(newScale);
   };
 
@@ -171,39 +195,140 @@ const MainApp = () => {
     const scaleBy = 1.1;
     const stage = stage2DRef.current;
     if (!stage) return;
-
     const oldScale = stage.scaleX();
     const pointer = stage.getPointerPosition();
     if (!pointer) return;
-
     const mousePointTo = {
       x: (pointer.x - stage.x()) / oldScale,
       y: (pointer.y - stage.y()) / oldScale,
     };
-
     let newScale = e.evt.deltaY > 0 ? oldScale / scaleBy : oldScale * scaleBy;
-    newScale = Math.max(0.1, Math.min(newScale, 5)); // Zoom limitleri
-    
+    newScale = Math.max(0.1, Math.min(newScale, 5));
     if (Math.abs(oldScale - newScale) < 0.001) return;
-
     setStage2DScale(newScale);
-
     const newPos = {
       x: pointer.x - mousePointTo.x * newScale,
       y: pointer.y - mousePointTo.y * newScale,
     };
     setStage2DPosition(newPos);
   };
-  // --- Bitiş: 2D Stage Zoom ve Pan ---
 
+  const exportToPNG = () => {
+    let dataURL;
+    let filename = 'rack-diagram.png';
+    if (viewMode === '3D' && canvas3DRef.current?.gl) {
+      const gl = canvas3DRef.current.gl;
+      gl.preserveDrawingBuffer = true; 
+      dataURL = gl.domElement.toDataURL('image/png');
+      gl.preserveDrawingBuffer = false;
+      filename = 'rack-diagram-3d.png';
+    } else if (viewMode === '2D' && stage2DRef.current) {
+      dataURL = stage2DRef.current.toDataURL({ pixelRatio: 3 }); 
+      filename = 'rack-diagram-2d.png';
+    } else {
+      alert('Çizim alanı henüz hazır değil.');
+      return;
+    }
+    if (!dataURL) {
+        alert('Görüntü verisi oluşturulamadı.');
+        return;
+    }
+    const link = document.createElement('a');
+    link.href = dataURL;
+    link.download = filename;
+    link.click();
+  };
+  
+  const exportToSVG_HighRes = () => {
+    if (viewMode !== '2D' || !stage2DRef.current) {
+      alert('SVG dışa aktarma yalnızca 2D görünüm için geçerlidir ve çizim alanı hazır olmalıdır.');
+      return;
+    }
+    try {
+      const svgData = stage2DRef.current.toSVG();
+      const blob = new Blob([svgData], { type: 'image/svg+xml;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = 'rack-diagram-2d.svg';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error("SVG dışa aktarma hatası:", error);
+      alert("SVG dışa aktarılırken bir hata oluştu. Konsolu kontrol edin.");
+    }
+  };
 
-  const exportToPNG = () => { /* ... (önceki gibi) ... */ };
-  const exportToPDF = () => { /* ... (önceki gibi) ... */ };
-  const exportToSVG = () => { /* ... (önceki gibi) ... */ };
-  const renderErrors = (errorsData) => { /* ... (önceki gibi) ... */ };
+  const exportToPDF = () => {
+    let dataURL;
+    if (viewMode === '3D' && canvas3DRef.current?.gl) {
+      const gl = canvas3DRef.current.gl;
+      gl.preserveDrawingBuffer = true;
+      dataURL = gl.domElement.toDataURL('image/png');
+      gl.preserveDrawingBuffer = false;
+    } else if (viewMode === '2D' && stage2DRef.current) {
+      dataURL = stage2DRef.current.toDataURL({ pixelRatio: 2 });
+    } else {
+      alert('Çizim alanı henüz hazır değil.');
+      return;
+    }
+    if (!dataURL) {
+        alert('Görüntü verisi oluşturulamadı.');
+        return;
+    }
+    const pdf = new jsPDF({ orientation: 'l', unit: 'mm', format: 'a4' });
+    const imgProps = pdf.getImageProperties(dataURL);
+    const margin = 10;
+    const pdfWidth = pdf.internal.pageSize.getWidth() - 2 * margin;
+    const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
+    let pageHeight = pdf.internal.pageSize.getHeight() - 2 * margin;
+    if (pdfHeight > pageHeight) {
+      const newPdfWidth = (imgProps.width * pageHeight) / imgProps.height;
+      pdf.addImage(dataURL, 'PNG', margin, margin, newPdfWidth, pageHeight);
+    } else {
+      pdf.addImage(dataURL, 'PNG', margin, margin, pdfWidth, pdfHeight);
+    }
+    pdf.save(`rack-diagram-${viewMode.toLowerCase()}.pdf`);
+  };
+  
+  const renderErrors = (errorsData) => {
+    if (!errorsData) return null;
+    let errorMessages = [];
+    if (typeof errorsData === 'string') {
+      errorMessages.push(<p key="single-error">{errorsData}</p>);
+    } else if (typeof errorsData === 'object') {
+      Object.entries(errorsData).forEach(([key, value]) => {
+        if (key === 'upload' && typeof value === 'string') {
+          errorMessages.push(<p key={key}><strong>Genel Yükleme Hatası:</strong> {value}</p>);
+        } else if (Array.isArray(value)) {
+          errorMessages.push(
+            <div key={key}>
+              <strong>Sayfa '{key}' için hatalar:</strong>
+              <ul>
+                {value.map((err, index) => (
+                  <li key={index}>{typeof err === 'object' ? JSON.stringify(err) : err}</li>
+                ))}
+              </ul>
+            </div>
+          );
+        } else if (typeof value === 'string') {
+           errorMessages.push(<p key={key}><strong>{key}:</strong> {value}</p>);
+        }
+      });
+    }
+    if (errorMessages.length === 0) return null;
+    return (
+      <div className="error-container">
+        <h4>Hata Oluştu:</h4>
+        {errorMessages}
+      </div>
+    );
+  };
 
   const stage2DWidth = Math.max(window.innerWidth * 0.95, (Object.keys(cabinets).length * (R2D_FRAME_WIDTH + R2D_SPACING)) + R2D_SPACING);
-  const stage2DHeight = Math.max(window.innerHeight * 0.7, 700); // Minimum yükseklik
+  const stage2DHeight = Math.max(window.innerHeight * 0.7, 700);
 
 
   return (
@@ -225,7 +350,6 @@ const MainApp = () => {
           </div>
         )}
 
-        {/* 2D Görünüm için Zoom Butonları */}
         {viewMode === '2D' && Object.keys(cabinets).length > 0 && (
             <div className="button-container" style={{ justifyContent: 'flex-start', maxWidth: stage2DWidth, margin: '10px auto' }}>
                 <button onClick={() => handleZoom2D(true)}>Yakınlaştır (2D)</button>
@@ -239,7 +363,8 @@ const MainApp = () => {
             <button className="help-button">Nasıl Kullanılır?</button>
           </Link>
           <button onClick={exportToPNG} disabled={isLoading || Object.keys(cabinets).length === 0}>PNG İndir</button>
-          <button onClick={exportToSVG} disabled={isLoading || Object.keys(cabinets).length === 0}>SVG İndir (Beta)</button>
+          <button onClick={exportToSVG_HighRes} disabled={isLoading || Object.keys(cabinets).length === 0 || viewMode !== '2D'}>SVG İndir (2D)</button>
+          {/* PPTX butonu kaldırıldı */}
           <button onClick={exportToPDF} disabled={isLoading || Object.keys(cabinets).length === 0}>PDF İndir</button>
         </div>
 
@@ -249,9 +374,9 @@ const MainApp = () => {
             style={{ 
                 height: `${stage2DHeight}px`, 
                 backgroundColor: '#FFF', 
-                overflow: 'auto', // Stage içeriği taşarsa scrollbar çıksın
-                width: '95vw', // Genişliği viewport'a göre ayarla
-                maxWidth: `${stage2DWidth + 20}px`, // İçeriğe göre maksimum genişlik
+                overflow: 'auto',
+                width: '95vw', 
+                maxWidth: `${stage2DWidth + 20}px`,
                 margin: '0 auto'
             }}
           >
@@ -260,7 +385,7 @@ const MainApp = () => {
                 height={stage2DHeight} 
                 ref={stage2DRef}
                 draggable={true}
-                onWheel={handleWheel2D} // Tekerlek ile zoom
+                onWheel={handleWheel2D}
                 scaleX={stage2DScale}
                 scaleY={stage2DScale}
                 x={stage2DPosition.x}
@@ -299,7 +424,6 @@ const MainApp = () => {
         )}
 
         {viewMode === '3D' && (
-          // ... (Mevcut 3D Canvas ve içeriği aynı kalır) ...
           <div className="stage-container" style={{ height: '75vh' }}>
             <Canvas ref={canvas3DRef} camera={{ position: [0, RACK_TOTAL_FRAME_HEIGHT_3D * 0.7, 25], fov: 50 }} gl={{ preserveDrawingBuffer: true }}>
               <ambientLight intensity={Math.PI / 1.5} />

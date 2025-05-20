@@ -12,8 +12,8 @@ const BASE_RACK_TOP_BOTTOM_THICKNESS = 0.1;
 const BASE_DEVICE_DEFAULT_DEPTH = 1.4;
 const BASE_U_NUMBER_FONT_SIZE = 0.06;
 const BASE_CABINET_NAME_FONT_SIZE = 0.36;
-const BASE_DEVICE_NAME_FONT_SIZE = 0.070; // Cihaz adı için temel font boyutu
-const BASE_DEVICE_WARNING_FONT_SIZE = 0.045; // Cihaz uyarı metni için temel font boyutu
+const BASE_DEVICE_NAME_FONT_SIZE = 0.070;
+const BASE_DEVICE_WARNING_FONT_SIZE = 0.045;
 
 const CABINET_SCALE_FACTOR = 2.3; 
 // --- Bitiş: Kullanıcının sağladığı yeni temel ölçüler ---
@@ -44,40 +44,28 @@ const RackComponent3D = ({ cabinetName, devicesData, position }) => {
   const groupRef = useRef();
   const cabinetBaseY = -RACK_TOTAL_FRAME_HEIGHT / 2;
 
-  // console.log(`[RackComponent3D - ${cabinetName}] Gelen devicesData:`, JSON.parse(JSON.stringify(devicesData || [])));
-
   const maxUoccupiedByData = Array.isArray(devicesData) 
     ? Math.max(0, ...devicesData.map(d => (parseFloat(d.U) || 0) + (parseInt(d.Rack, 10) || 1) - 1)) 
     : 0;
   const isOverflownGlobally = maxUoccupiedByData > RACK_TOTAL_U;
 
-  // Materyaller
-  const frameMaterial = useMemo(() => new THREE.MeshStandardMaterial({ 
-    color: '#5D6D7E', 
-    metalness: 0.1, // Metalikliği azalt
-    roughness: 0.8  // Pürüzlülüğü artır (daha mat)
-  }), []);
-  const sidePostMaterial = useMemo(() => new THREE.MeshStandardMaterial({ 
-    color: '#34495E', 
-    metalness: 0.2, // Metalikliği azalt
-    roughness: 0.7  // Pürüzlülüğü artır
-  }), []);
+  const frameMaterial = useMemo(() => new THREE.MeshStandardMaterial({ color: '#5D6D7E', metalness: 0.1, roughness: 0.8 }), []);
+  const sidePostMaterial = useMemo(() => new THREE.MeshStandardMaterial({ color: '#34495E', metalness: 0.2, roughness: 0.7 }), []);
   const deviceFrontMaterial = useMemo(() => new THREE.MeshStandardMaterial({ color: '#81D4FA', metalness: 0.3, roughness: 0.6 }), []);
   const deviceRearMaterial = useMemo(() => new THREE.MeshStandardMaterial({ color: '#FFAB91', metalness: 0.3, roughness: 0.6 }), []);
   const textMaterial = useMemo(() => new THREE.MeshStandardMaterial({ color: '#212121', roughness: 0.8 }), []);
   const overflowDeviceMaterial = useMemo(() => new THREE.MeshStandardMaterial({ color: 'lightcoral', metalness: 0.3, roughness: 0.6 }), []);
   const warningTextMaterial = useMemo(() => new THREE.MeshStandardMaterial({ color: 'red', roughness: 0.8 }), []);
 
-
   return (
     <group ref={groupRef} position={position}>
       <Text
         position={[0, RACK_TOTAL_FRAME_HEIGHT / 2 + (0.2 * CABINET_SCALE_FACTOR), 0]}
         fontSize={CABINET_NAME_FONT_SIZE}
-        color="black" // Text için 'color' prop'u genellikle materyalden bağımsız çalışır
+        color="black"
         anchorX="center"
         anchorY="middle"
-        material={textMaterial} // Metin için ayrı bir mat materyal (isteğe bağlı)
+        material={textMaterial}
       >
         {cabinetName}
       </Text>
@@ -94,7 +82,6 @@ const RackComponent3D = ({ cabinetName, devicesData, position }) => {
         </Text>
       )}
 
-      {/* Kabin Çerçevesi */}
       <Box args={[RACK_FRAME_SIDE_THICKNESS, RACK_TOTAL_FRAME_HEIGHT, RACK_FRAME_DEPTH]} position={[-RACK_INNER_WIDTH / 2 - RACK_FRAME_SIDE_THICKNESS / 2, 0, 0]}>
         <primitive object={sidePostMaterial} attach="material" />
       </Box>
@@ -108,7 +95,6 @@ const RackComponent3D = ({ cabinetName, devicesData, position }) => {
         <primitive object={frameMaterial} attach="material" />
       </Box>
 
-      {/* U Numaralandırması */}
       {Array.from({ length: RACK_TOTAL_U }, (_, i) => {
         const uNumber = i + 1;
         const uLabelY = cabinetBaseY + RACK_TOP_BOTTOM_THICKNESS + (uNumber -1) * U_HEIGHT + U_HEIGHT / 2;
@@ -127,7 +113,6 @@ const RackComponent3D = ({ cabinetName, devicesData, position }) => {
         );
       })}
 
-      {/* Cihazların Render Edilmesi */}
       {Array.isArray(devicesData) && devicesData.map((device, index) => {
         const originalUSize = parseFloat(device.U);
         const originalStartUNumber = parseInt(device.Rack, 10);
@@ -165,7 +150,7 @@ const RackComponent3D = ({ cabinetName, devicesData, position }) => {
             : (device.Face && device.Face.toLowerCase() === 'arka' ? deviceRearMaterial : deviceFrontMaterial);
 
         const brandModelTextYOffset = 0; 
-        const warningTextYOffset = -DEVICE_NAME_FONT_SIZE * 0.7; // Uyarıyı biraz daha aşağı al
+        const warningTextYOffset = -DEVICE_NAME_FONT_SIZE * 0.7;
 
         return (
           <group key={device.Serial || `device-${cabinetName}-${index}`} position={[0, deviceCenterY, deviceZPosition]}>

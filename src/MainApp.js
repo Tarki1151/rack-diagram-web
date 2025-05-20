@@ -9,6 +9,7 @@ import { Stage, Layer } from 'react-konva';
 import { Canvas } from '@react-three/fiber';
 import { OrbitControls, Html, Grid } from '@react-three/drei';
 import { jsPDF } from 'jspdf';
+import * as PptxGenJS from 'pptxgenjs';
 
 // GCP Cloud Function URL
 const CLOUD_FUNCTION_URL = 'https://europe-north1-rackcizimweb.cloudfunctions.net/rack-diagram-processor'; // Remove the markdown link format
@@ -261,6 +262,49 @@ const MainApp = () => {
     }
   };
 
+  const exportToPPTX = () => {
+    if (viewMode !== '2D' || !stage2DRef.current) {
+      alert('PPTX dışa aktarma yalnızca 2D görünüm için geçerlidir.');
+      return;
+    }
+    
+    try {
+      // Yeni bir PPTX sunusu oluştur
+      const pptx = new PptxGenJS.default();
+      const slide = pptx.addSlide();
+      
+      // Sunu başlığı ekle
+      slide.addText('Rack Diyagramı', {
+        x: 0.5,
+        y: 0.25,
+        w: '90%',
+        h: 0.5,
+        fontSize: 18,
+        bold: true,
+        align: 'center',
+      });
+      
+      // Canvas'ı resim olarak al
+      const dataURL = stage2DRef.current.toDataURL({ pixelRatio: 2 });
+      
+      // Resmi PPTX'e ekle
+      slide.addImage({
+        data: dataURL,
+        x: 0.5,
+        y: 1,
+        w: 9,
+        h: 5,
+      });
+      
+      // Sunuyu indir
+      pptx.writeFile({ fileName: 'rack-diagram.pptx' });
+      
+    } catch (error) {
+      console.error('PPTX oluşturma hatası:', error);
+      alert('PPTX oluşturulurken bir hata oluştu: ' + error.message);
+    }
+  };
+
   const exportToPDF = () => {
     let dataURL;
     if (viewMode === '3D' && canvas3DRef.current?.gl) {
@@ -365,6 +409,7 @@ const MainApp = () => {
           <button onClick={exportToPNG} disabled={isLoading || Object.keys(cabinets).length === 0}>PNG İndir</button>
           <button onClick={exportToSVG_HighRes} disabled={isLoading || Object.keys(cabinets).length === 0 || viewMode !== '2D'}>SVG İndir (2D)</button>
           {/* PPTX butonu kaldırıldı */}
+          <button onClick={exportToPPTX} disabled={isLoading || Object.keys(cabinets).length === 0 || viewMode !== '2D'}>PPTX İndir</button>
           <button onClick={exportToPDF} disabled={isLoading || Object.keys(cabinets).length === 0}>PDF İndir</button>
         </div>
 

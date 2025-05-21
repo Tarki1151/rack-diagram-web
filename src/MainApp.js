@@ -69,27 +69,96 @@ const MainApp = () => {
   const initializePositions = (dataFromExcel) => {
     const cabinetNames = Object.keys(dataFromExcel || {}).sort(naturalSort);
     
+    // 3D pozisyonlar için
     const initialYPosition3D = RACK_TOTAL_FRAME_HEIGHT_3D / 2;
     const cabinetWidthFor3DLayout = ACTUAL_CABINET_WIDTH_METERS_3D;
-    const totalLayoutWidth3D = (cabinetNames.length * cabinetWidthFor3DLayout);
-    const firstCabinetX3D = -totalLayoutWidth3D / 2 + cabinetWidthFor3DLayout / 2;
-    const new3DPos = {};
-    cabinetNames.forEach((name, i) => {
-      new3DPos[name] = { 
-        x: firstCabinetX3D + i * cabinetWidthFor3DLayout, 
-        y: initialYPosition3D, 
-        z: 0 
-      };
+    const corridorSpacing3D = ACTUAL_CABINET_WIDTH_METERS_3D * 2; // Koridorlar arası boşluk
+    
+    // Koridorlara göre kabinleri grupla
+    const corridorGroups = {};
+    cabinetNames.forEach(name => {
+      const corridor = dataFromExcel[name]?.[0]?.Corridor;
+      if (!corridorGroups[corridor]) {
+        corridorGroups[corridor] = [];
+      }
+      corridorGroups[corridor].push(name);
     });
+    
+    // 3D pozisyonları hesapla
+    const new3DPos = {};
+    let currentX = 0;
+    let currentZ = 0;
+    
+    // Önce koridorsuz kabinleri yerleştir
+    if (corridorGroups[undefined]) {
+      const noCorridorCabinets = corridorGroups[undefined];
+      const totalWidth = noCorridorCabinets.length * cabinetWidthFor3DLayout;
+      const startX = -totalWidth / 2 + cabinetWidthFor3DLayout / 2;
+      
+      noCorridorCabinets.forEach((name, i) => {
+        new3DPos[name] = {
+          x: startX + i * cabinetWidthFor3DLayout,
+          y: initialYPosition3D,
+          z: currentZ
+        };
+      });
+      currentX = totalWidth / 2 + corridorSpacing3D;
+    }
+    
+    // Sonra koridorlu kabinleri yerleştir
+    Object.entries(corridorGroups).forEach(([corridor, cabinets]) => {
+      if (corridor) { // Koridorsuz kabinleri atla
+        const totalWidth = cabinets.length * cabinetWidthFor3DLayout;
+        const startX = currentX;
+        
+        cabinets.forEach((name, i) => {
+          new3DPos[name] = {
+            x: startX + i * cabinetWidthFor3DLayout,
+            y: initialYPosition3D,
+            z: currentZ
+          };
+        });
+        
+        currentX += totalWidth + corridorSpacing3D;
+      }
+    });
+    
     setPositions3D(new3DPos);
 
+    // 2D pozisyonlar için
     const new2DPos = {};
-    cabinetNames.forEach((name, i) => {
-      new2DPos[name] = {
-        x: i * (R2D_FRAME_WIDTH + R2D_SPACING) + R2D_SPACING,
-        y: R2D_INITIAL_Y,
-      };
+    let currentY = R2D_INITIAL_Y;
+    let currentX2D = R2D_SPACING;
+    let maxCabinetsInRow = 0;
+    
+    // Önce koridorsuz kabinleri yerleştir
+    if (corridorGroups[undefined]) {
+      const noCorridorCabinets = corridorGroups[undefined];
+      noCorridorCabinets.forEach((name, i) => {
+        new2DPos[name] = {
+          x: currentX2D + i * (R2D_FRAME_WIDTH + R2D_SPACING),
+          y: currentY
+        };
+      });
+      maxCabinetsInRow = Math.max(maxCabinetsInRow, noCorridorCabinets.length);
+    }
+    
+    // Sonra koridorlu kabinleri yerleştir
+    Object.entries(corridorGroups).forEach(([corridor, cabinets]) => {
+      if (corridor) { // Koridorsuz kabinleri atla
+        currentY += R2D_FRAME_WIDTH * 2 + 50; // 50px boşluk
+        currentX2D = R2D_SPACING;
+        
+        cabinets.forEach((name, i) => {
+          new2DPos[name] = {
+            x: currentX2D + i * (R2D_FRAME_WIDTH + R2D_SPACING),
+            y: currentY
+          };
+        });
+        maxCabinetsInRow = Math.max(maxCabinetsInRow, cabinets.length);
+      }
     });
+    
     setPositions2D(new2DPos);
   };
 

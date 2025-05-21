@@ -6,9 +6,6 @@
     "rackcizimweb": {
       "hosting": {
         "threed": [
-          "3drackcizim"
-        ],
-        "twodee": [
           "rackcizimweb"
         ]
       }

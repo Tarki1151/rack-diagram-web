@@ -9,10 +9,9 @@ import { Stage, Layer } from 'react-konva';
 import { Canvas } from '@react-three/fiber';
 import { OrbitControls, Html, Grid } from '@react-three/drei';
 import { jsPDF } from 'jspdf';
-import PptxGenJS from 'pptxgenjs';
 
 // GCP Cloud Function URL
-const CLOUD_FUNCTION_URL = 'https://europe-north1-rackcizimweb.cloudfunctions.net/rack-diagram-processor'; // Remove the markdown link format
+const CLOUD_FUNCTION_URL = 'https://europe-north1-rackcizimweb.cloudfunctions.net/rack-diagram-processor';
 
 // --- 3D Kabin Boyutları ---
 const R3D_BASE_U_HEIGHT = 0.0889; 
@@ -113,7 +112,6 @@ const MainApp = () => {
       const response = await fetch(CLOUD_FUNCTION_URL, {
         method: 'POST',
         body: formData,
-        // CORS headers are handled by the Cloud Function
       });
 
       let responseData;
@@ -131,13 +129,10 @@ const MainApp = () => {
         throw new Error(typeof errorDetail === 'string' ? errorDetail : JSON.stringify(errorDetail));
       }
 
-      // Check if we have valid data in the response
       if (responseData && typeof responseData === 'object') {
         if (Object.keys(responseData).length > 0) {
-          // Check if there are errors in the response
           if (responseData.errors && Object.keys(responseData.errors).length > 0) {
             setErrors(responseData.errors);
-            // Still try to process valid cabinets if any
             const validCabinets = { ...responseData };
             delete validCabinets.errors;
             if (Object.keys(validCabinets).length > 0) {
@@ -145,7 +140,6 @@ const MainApp = () => {
               initializePositions(validCabinets);
             }
           } else {
-            // No errors, process the data
             setCabinets(responseData);
             initializePositions(responseData);
           }
@@ -175,7 +169,8 @@ const MainApp = () => {
       [cabinetName]: { x: newX, y: newY }
     }));
   };
-   const handleCabinetDragMove2D = (e, currentGridSize) => {
+
+  const handleCabinetDragMove2D = (e, currentGridSize) => {
     const target = e.target;
     if (!target || typeof target.x !== 'function' || typeof target.y !== 'function') return;
     const newX = currentGridSize > 0 ? Math.round(target.x() / currentGridSize) * currentGridSize : target.x();
@@ -214,94 +209,109 @@ const MainApp = () => {
     setStage2DPosition(newPos);
   };
 
-  const exportToPNG = () => {
-    let dataURL;
-    let filename = 'rack-diagram.png';
-    if (viewMode === '3D' && canvas3DRef.current?.gl) {
-      const gl = canvas3DRef.current.gl;
-      gl.preserveDrawingBuffer = true; 
-      dataURL = gl.domElement.toDataURL('image/png');
-      gl.preserveDrawingBuffer = false;
-      filename = 'rack-diagram-3d.png';
-    } else if (viewMode === '2D' && stage2DRef.current) {
-      dataURL = stage2DRef.current.toDataURL({ pixelRatio: 3 }); 
-      filename = 'rack-diagram-2d.png';
-    } else {
-      alert('Çizim alanı henüz hazır değil.');
-      return;
-    }
-    if (!dataURL) {
-        alert('Görüntü verisi oluşturulamadı.');
-        return;
-    }
-    const link = document.createElement('a');
-    link.href = dataURL;
-    link.download = filename;
-    link.click();
-  };
-  
   const exportToSVG_HighRes = () => {
     if (viewMode !== '2D' || !stage2DRef.current) {
       alert('SVG dışa aktarma yalnızca 2D görünüm için geçerlidir ve çizim alanı hazır olmalıdır.');
       return;
     }
     try {
-      const svgData = stage2DRef.current.toSVG();
-      const blob = new Blob([svgData], { type: 'image/svg+xml;charset=utf-8' });
-      const url = URL.createObjectURL(blob);
+      let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+      Object.entries(cabinets).forEach(([cabinetName]) => {
+        const pos = positions2D[cabinetName];
+        if (pos) {
+          minX = Math.min(minX, pos.x);
+          minY = Math.min(minY, pos.y);
+          maxX = Math.max(maxX, pos.x + R2D_FRAME_WIDTH);
+          maxY = Math.max(maxY, pos.y + R2D_FRAME_WIDTH * 2);
+        }
+      });
+
+      const padding = 20;
+      minX -= padding;
+      minY -= padding;
+      maxX += padding;
+      maxY += padding;
+
+      const dataURL = stage2DRef.current.toDataURL({
+        x: minX,
+        y: minY,
+        width: maxX - minX,
+        height: maxY - minY,
+        pixelRatio: 3,
+        mimeType: 'image/svg+xml'
+      });
+
       const link = document.createElement('a');
-      link.href = url;
+      link.href = dataURL;
       link.download = 'rack-diagram-2d.svg';
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
-      URL.revokeObjectURL(url);
     } catch (error) {
       console.error("SVG dışa aktarma hatası:", error);
       alert("SVG dışa aktarılırken bir hata oluştu. Konsolu kontrol edin.");
     }
   };
 
-  const exportToPPTX = () => {
+  const exportToJPG = () => {
     if (viewMode !== '2D' || !stage2DRef.current) {
-      alert('PPTX dışa aktarma yalnızca 2D görünüm için geçerlidir.');
+      alert('JPG dışa aktarma yalnızca 2D görünüm için geçerlidir ve çizim alanı hazır olmalıdır.');
       return;
     }
-    
     try {
-      // Yeni bir PPTX sunusu oluştur
-      const pptx = new PptxGenJS();
-      const slide = pptx.addSlide();
-      
-      // Sunu başlığı ekle
-      slide.addText('Rack Diyagramı', {
-        x: 0.5,
-        y: 0.25,
-        w: '90%',
-        h: 0.5,
-        fontSize: 18,
-        bold: true,
-        align: 'center',
+      // Tüm kabinlerin sınırlarını hesapla
+      let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+      Object.entries(cabinets).forEach(([cabinetName]) => {
+        const pos = positions2D[cabinetName];
+        if (pos) {
+          minX = Math.min(minX, pos.x);
+          minY = Math.min(minY, pos.y);
+          maxX = Math.max(maxX, pos.x + R2D_FRAME_WIDTH);
+          maxY = Math.max(maxY, pos.y + R2D_FRAME_WIDTH * 2);
+        }
       });
-      
-      // Canvas'ı resim olarak al
-      const dataURL = stage2DRef.current.toDataURL({ pixelRatio: 2 });
-      
-      // Resmi PPTX'e ekle
-      slide.addImage({
-        data: dataURL,
-        x: 0.5,
-        y: 1,
-        w: 9,
-        h: 5,
+
+      // Sınırlara padding ekle
+      const padding = 20;
+      minX -= padding;
+      minY -= padding;
+      maxX += padding;
+      maxY += padding;
+
+      // Stage'in mevcut ölçek ve pozisyonunu kaydet
+      const currentScale = stage2DScale;
+      const currentPosition = stage2DPosition;
+
+      // Stage'i orijinal pozisyonuna ve ölçeğine getir
+      stage2DRef.current.scale({ x: 1, y: 1 });
+      stage2DRef.current.position({ x: 0, y: 0 });
+
+      // JPG'yi oluştur
+      const dataURL = stage2DRef.current.toDataURL({
+        x: minX,
+        y: minY,
+        width: maxX - minX,
+        height: maxY - minY,
+        pixelRatio: 3,
+        mimeType: 'image/jpeg',
+        quality: 0.95,
+        imageSmoothingEnabled: true,
+        imageSmoothingQuality: 'high'
       });
-      
-      // Sunuyu indir
-      pptx.writeFile({ fileName: 'rack-diagram.pptx' });
-      
+
+      // Stage'i eski haline getir
+      stage2DRef.current.scale({ x: currentScale, y: currentScale });
+      stage2DRef.current.position(currentPosition);
+
+      const link = document.createElement('a');
+      link.href = dataURL;
+      link.download = 'rack-diagram-2d.jpg';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
     } catch (error) {
-      console.error('PPTX oluşturma hatası:', error);
-      alert('PPTX oluşturulurken bir hata oluştu: ' + error.message);
+      console.error("JPG dışa aktarma hatası:", error);
+      alert("JPG dışa aktarılırken bir hata oluştu. Konsolu kontrol edin.");
     }
   };
 
@@ -319,8 +329,8 @@ const MainApp = () => {
       return;
     }
     if (!dataURL) {
-        alert('Görüntü verisi oluşturulamadı.');
-        return;
+      alert('Görüntü verisi oluşturulamadı.');
+      return;
     }
     const pdf = new jsPDF({ orientation: 'l', unit: 'mm', format: 'a4' });
     const imgProps = pdf.getImageProperties(dataURL);
@@ -336,7 +346,7 @@ const MainApp = () => {
     }
     pdf.save(`rack-diagram-${viewMode.toLowerCase()}.pdf`);
   };
-  
+
   const renderErrors = (errorsData) => {
     if (!errorsData) return null;
     let errorMessages = [];
@@ -374,6 +384,12 @@ const MainApp = () => {
   const stage2DWidth = Math.max(window.innerWidth * 0.95, (Object.keys(cabinets).length * (R2D_FRAME_WIDTH + R2D_SPACING)) + R2D_SPACING);
   const stage2DHeight = Math.max(window.innerHeight * 0.7, 700);
 
+  const handleDeviceColorUpdate = (cabinetName, updatedData) => {
+    setCabinets(prev => ({
+      ...prev,
+      [cabinetName]: updatedData
+    }));
+  };
 
   return (
     <div className="app-container">
@@ -406,10 +422,8 @@ const MainApp = () => {
           <Link to="/">
             <button className="help-button">Nasıl Kullanılır?</button>
           </Link>
-          <button onClick={exportToPNG} disabled={isLoading || Object.keys(cabinets).length === 0}>PNG İndir</button>
-          <button onClick={exportToSVG_HighRes} disabled={isLoading || Object.keys(cabinets).length === 0 || viewMode !== '2D'}>SVG İndir (2D)</button>
-          {/* PPTX butonu kaldırıldı */}
-          <button onClick={exportToPPTX} disabled={isLoading || Object.keys(cabinets).length === 0 || viewMode !== '2D'}>PPTX İndir</button>
+          <button onClick={exportToJPG} disabled={isLoading || Object.keys(cabinets).length === 0 || viewMode !== '2D'}>JPG İndir</button>
+          <button onClick={exportToSVG_HighRes} disabled={isLoading || Object.keys(cabinets).length === 0 || viewMode !== '2D'}>SVG İndir</button>
           <button onClick={exportToPDF} disabled={isLoading || Object.keys(cabinets).length === 0}>PDF İndir</button>
         </div>
 
@@ -458,6 +472,7 @@ const MainApp = () => {
                         gridSize={R2D_GRID_SIZE}
                         labelMargin={5}
                         labelAlignment="center"
+                        onDeviceColorUpdate={(updatedData) => handleDeviceColorUpdate(cabinetName, updatedData)}
                       />
                     );
                   }

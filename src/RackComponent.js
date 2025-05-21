@@ -11,9 +11,21 @@ const RackComponent = ({
   handleDragEnd,
   gridSize,
   labelMargin,
-  labelAlignment
+  labelAlignment,
+  onDeviceColorUpdate
 }) => {
-  const [tooltip, setTooltip] = useState(null); // Hook en üste taşındı
+  const [tooltip, setTooltip] = useState(null);
+  const [selectedDevice, setSelectedDevice] = useState(null);
+  const [showColorPalette, setShowColorPalette] = useState(false);
+  const [colorPalettePosition, setColorPalettePosition] = useState({ x: 0, y: 0 });
+
+  // 32 renk paleti
+  const colorPalette = [
+    '#FFCDD2', '#F8BBD0', '#E1BEE7', '#D1C4E9', '#C5CAE9', '#BBDEFB', '#B3E5FC', '#B2EBF2',
+    '#B2DFDB', '#C8E6C9', '#DCEDC8', '#F0F4C3', '#FFF9C4', '#FFECB3', '#FFE0B2', '#FFCCBC',
+    '#D7CCC8', '#F5F5F5', '#CFD8DC', '#B0BEC5', '#90A4AE', '#78909C', '#607D8B', '#546E7A',
+    '#455A64', '#37474F', '#263238', '#000000', '#FFFFFF', '#FF0000', '#00FF00', '#0000FF'
+  ];
 
   if (!position || typeof position.x === 'undefined' || typeof position.y === 'undefined') {
     console.error(`[RackComponent 2D] '${cabinet || name}' için pozisyon bilgisi (x, y) eksik veya geçersiz. Alınan pozisyon:`, position);
@@ -58,9 +70,11 @@ const RackComponent = ({
     const owner = formattedOwner.length > 25 ? formattedOwner.slice(0, 25) + '..' : formattedOwner;
     const serial = item.Serial || 'Bilinmiyor';
     const formattedSerial = serial.length > 25 ? serial.slice(0, 25) + '..' : serial;
+    
+    // Tooltip'i fare imlecinin yanında göster, 200px sola kaydır
     setTooltip({
-      x: pointerPosition.x - position.x + 10,
-      y: pointerPosition.y - position.y + 10,
+      x: pointerPosition.x - 200,
+      y: pointerPosition.y,
       owner: owner,
       serial: formattedSerial,
       brandModel: item.BrandModel || 'Bilinmeyen Model'
@@ -69,6 +83,38 @@ const RackComponent = ({
 
   const handleMouseLeave = () => {
     setTooltip(null);
+  };
+
+  const handleDeviceClick = (e, item) => {
+    const stage = e.target.getStage();
+    if (!stage) return;
+    const pointerPosition = stage.getPointerPosition();
+    if (!pointerPosition) return;
+
+    setSelectedDevice(item);
+    setColorPalettePosition({
+      x: pointerPosition.x - 200, // 200px sola kaydır
+      y: pointerPosition.y
+    });
+    setShowColorPalette(true);
+  };
+
+  const handleColorSelect = (color) => {
+    if (selectedDevice) {
+      // Seçilen cihazın rengini güncelle
+      const updatedData = data.map(item => {
+        if (item.Serial === selectedDevice.Serial) {
+          return { ...item, customColor: color };
+        }
+        return item;
+      });
+      // Callback ile üst bileşene bildir
+      if (onDeviceColorUpdate) {
+        onDeviceColorUpdate(updatedData);
+      }
+      setShowColorPalette(false);
+      setSelectedDevice(null);
+    }
   };
 
   const formatProductName = (name, uValue) => {
@@ -181,7 +227,7 @@ const RackComponent = ({
           <Text
             name="overflownDeviceWarning"
             x={deviceAreaStartX} y={headerHeight + uAreaTopMargin + usableDrawHeight / 2}
-            text={`${rackUnits}U’dan Yüksek (${maxUoccupied}U)`}
+            text={`${rackUnits}U'dan Yüksek (${maxUoccupied}U)`}
             fontSize={9} fill="black" width={drawableDeviceAreaWidth}
             align="center" verticalAlign="middle" padding={2} listening={false}
           />
@@ -201,7 +247,8 @@ const RackComponent = ({
 
           const rectY = headerHeight + uAreaTopMargin + (drawableStartUNumber - 1) * uHeight;
           const rectHeight = drawableUSize * uHeight;
-          const color = (item.Face && item.Face.toLowerCase() === 'arka') ? '#FFCDD2' : '#BBDEFB';
+          const defaultColor = (item.Face && item.Face.toLowerCase() === 'arka') ? '#FFCDD2' : '#BBDEFB';
+          const color = item.customColor || defaultColor;
           const deviceKey = item.Serial || `device-${index}`;
 
           return (
@@ -213,6 +260,7 @@ const RackComponent = ({
                 fill={color} stroke="#78909C" strokeWidth={0.5} cornerRadius={1}
                 onMouseEnter={(e) => handleMouseEnter(e, item)}
                 onMouseLeave={handleMouseLeave}
+                onClick={(e) => handleDeviceClick(e, item)}
               />
               <Text
                 name={`deviceText_${deviceKey}`}
@@ -227,8 +275,9 @@ const RackComponent = ({
         })
       )}
 
+      {/* Tooltip - En üstte gösterilecek */}
       {tooltip && (
-        <Group x={tooltip.x} y={tooltip.y} listening={false}>
+        <Group x={tooltip.x} y={tooltip.y} listening={false} globalCompositeOperation="source-over" zIndex={1000}>
           <Rect
             width={Math.max(170, (tooltip.brandModel || "").length * 6 + 20)}
             height={65}
@@ -248,26 +297,64 @@ const RackComponent = ({
             fontStyle="bold"
             fill="#FAFAFA"
             padding={7}
-            width={Math.max(160, (tooltip.brandModel || "").length * 6 + 10)}
           />
           <Text
-            text={`Owner: ${tooltip.owner || 'N/A'}`}
+            text={`Sahip: ${tooltip.owner}`}
             fontSize={9}
             fill="#E0E0E0"
             padding={7}
             y={20}
-            width={160}
-            lineHeight={1.2}
           />
           <Text
-            text={`Serial: ${tooltip.serial || 'N/A'}`}
+            text={`Seri No: ${tooltip.serial}`}
             fontSize={9}
             fill="#E0E0E0"
             padding={7}
             y={35}
-            width={160}
-            lineHeight={1.2}
           />
+        </Group>
+      )}
+
+      {/* Renk Paleti - En üstte gösterilecek */}
+      {showColorPalette && (
+        <Group x={colorPalettePosition.x} y={colorPalettePosition.y} globalCompositeOperation="source-over" zIndex={1000}>
+          <Rect
+            width={200}
+            height={160}
+            fill="white"
+            stroke="#B0BEC5"
+            strokeWidth={1}
+            cornerRadius={4}
+            shadowColor="black"
+            shadowBlur={5}
+            shadowOpacity={0.25}
+            shadowOffsetX={1}
+            shadowOffsetY={1}
+          />
+          {colorPalette.map((color, index) => {
+            const row = Math.floor(index / 8);
+            const col = index % 8;
+            return (
+              <Rect
+                key={`color-${index}`}
+                x={10 + col * 22}
+                y={10 + row * 22}
+                width={20}
+                height={20}
+                fill={color}
+                stroke="#B0BEC5"
+                strokeWidth={0.5}
+                cornerRadius={2}
+                onClick={() => handleColorSelect(color)}
+                onMouseEnter={(e) => {
+                  e.target.getStage().container().style.cursor = 'pointer';
+                }}
+                onMouseLeave={(e) => {
+                  e.target.getStage().container().style.cursor = 'default';
+                }}
+              />
+            );
+          })}
         </Group>
       )}
     </Group>
